@@ -1,0 +1,5 @@
+{
+  "server_port": 8020,
+  "android_require_gms_attestation": false,
+  "android_require_verified_boot_green": false
+}
