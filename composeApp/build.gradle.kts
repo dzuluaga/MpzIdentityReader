@@ -38,6 +38,7 @@ kotlin {
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.fragment)
             implementation(libs.ktor.client.android)
         }
         val commonMain by getting {
@@ -49,10 +50,17 @@ kotlin {
                 implementation(compose.ui)
                 implementation(compose.components.resources)
                 implementation(compose.components.uiToolingPreview)
+                implementation(compose.materialIconsExtended)
+                implementation(libs.jetbrains.navigation.compose)
+                implementation(libs.jetbrains.navigation.runtime)
+                implementation(libs.jetbrains.lifecycle.viewmodel.compose)
                 implementation(libs.androidx.lifecycle.viewmodel)
                 implementation(libs.androidx.lifecycle.runtimeCompose)
 
                 implementation(libs.multipaz)
+                implementation(libs.multipaz.models)
+                implementation(libs.multipaz.compose)
+                implementation(libs.multipaz.doctypes)
 
                 implementation(libs.kotlinx.datetime)
                 implementation(libs.kotlinx.serialization.json)
@@ -60,6 +68,7 @@ kotlin {
                 implementation(libs.kotlinx.io.bytestring)
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.network)
+                implementation(libs.compottie)
             }
         }
         commonTest.dependencies {

@@ -10,7 +10,7 @@ androidx-core = "1.16.0"
 androidx-espresso = "3.6.1"
 androidx-lifecycle = "2.9.1"
 androidx-testExt = "1.2.1"
-composeMultiplatform = "1.8.2"
+composeMultiplatform = "1.9.0-alpha03"
 junit = "4.13.2"
 kotlin = "2.2.0"
 kotlinx-coroutines = "1.8.1"
@@ -18,11 +18,15 @@ kotlinx-io = "0.4.0"
 kotlinx-datetime = "0.6.0"
 kotlinx-serialization = "1.7.3"
 ksp = "2.2.0-2.0.2"
-multipaz = "0.92.1"
+multipaz = "0.93.0-pre.12.eaf2d257"
 ktor = "2.3.13"
 logback = "1.5.18"
 hsqldb = "2.7.2"
 mysql = "8.0.16"
+jetbrains-navigation = "2.8.0-alpha13"
+jetbrains-lifecycle = "2.9.1"
+androidx-fragment = "1.8.8"
+compottie = "2.0.0-rc04"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -64,6 +68,11 @@ ktor-server-logging = { module = "io.ktor:ktor-server-call-logging", version.ref
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref="logback" }
 hsqldb = { module = "org.hsqldb:hsqldb", version.ref = "hsqldb" }
 mysql = { module = "mysql:mysql-connector-java", version.ref = "mysql" }
+jetbrains-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref="jetbrains-navigation" }
+jetbrains-navigation-runtime = { module = "org.jetbrains.androidx.navigation:navigation-runtime", version.ref="jetbrains-navigation" }
+jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref="jetbrains-lifecycle" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref="androidx-fragment" }
+compottie = { module = "io.github.alexzhirkevich:compottie", version.ref="compottie" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

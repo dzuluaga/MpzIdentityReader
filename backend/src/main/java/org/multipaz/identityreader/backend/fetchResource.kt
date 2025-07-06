@@ -4,7 +4,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondBytes
-import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.rpc.backend.BackendEnvironment
