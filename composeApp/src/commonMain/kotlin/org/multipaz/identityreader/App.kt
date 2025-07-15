@@ -40,7 +40,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.io.bytestring.ByteString
 import multipazidentityreader.composeapp.generated.resources.Res
-import multipazidentityreader.composeapp.generated.resources.help_and_feedback_screen_title
+import multipazidentityreader.composeapp.generated.resources.about_screen_title
 import multipazidentityreader.composeapp.generated.resources.trusted_issuers_screen_title
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.cbor.Cbor
@@ -209,10 +209,10 @@ class App(
                                         contentDescription = null
                                     )
                                 },
-                                label = { Text(text = stringResource(Res.string.help_and_feedback_screen_title)) },
+                                label = { Text(text = stringResource(Res.string.about_screen_title)) },
                                 selected = false,
                                 onClick = {
-                                    navController.navigate(route = HelpAndFeedbackDestination.route)
+                                    navController.navigate(route = AboutDestination.route)
                                     coroutineScope.launch { drawerState.close() }
                                 }
                             )
@@ -331,8 +331,8 @@ class App(
                             }
                         )
                     }
-                    composable(route = HelpAndFeedbackDestination.route) {
-                        HelpAndFeedbackScreen(
+                    composable(route = AboutDestination.route) {
+                        AboutScreen(
                             onBackPressed = { navController.navigateUp() },
                         )
                     }

@@ -4,7 +4,7 @@
     <string name="start_screen_title">Identity Reader</string>
     <string name="scan_qr_title">Scan QR code</string>
     <string name="trusted_issuers_screen_title">Trusted issuers</string>
-    <string name="help_and_feedback_screen_title">Help and Feedback</string>
+    <string name="about_screen_title">About</string>
     <string name="show_certificate_screen_title">Certificate</string>
     <string name="show_certificate_screen_title_for_chain">Certificate chain</string>
 </resources>

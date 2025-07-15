@@ -31,8 +31,8 @@ data object TrustedIssuersDestination : Destination {
     override val route = "trusted_issuers"
 }
 
-data object HelpAndFeedbackDestination : Destination {
-    override val route = "help_and_feedback"
+data object AboutDestination : Destination {
+    override val route = "about"
 }
 
 data object CertificateViewerDestination : Destination {
@@ -89,7 +89,7 @@ val appDestinations = listOf(
     TransferDestination,
     ShowResultsDestination,
     TrustedIssuersDestination,
-    HelpAndFeedbackDestination,
+    AboutDestination,
     CertificateViewerDestination,
     TrustEntryViewerDestination,
     TrustEntryEditorDestination

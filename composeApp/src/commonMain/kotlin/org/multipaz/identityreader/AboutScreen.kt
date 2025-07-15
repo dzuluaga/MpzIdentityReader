@@ -14,17 +14,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import multipazidentityreader.composeapp.generated.resources.Res
-import multipazidentityreader.composeapp.generated.resources.help_and_feedback_screen_title
+import multipazidentityreader.composeapp.generated.resources.about_screen_title
 import org.jetbrains.compose.resources.stringResource
+import org.multipaz.compose.webview.MarkdownText
 
 @Composable
-fun HelpAndFeedbackScreen(
+fun AboutScreen(
     onBackPressed: () -> Unit,
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = AnnotatedString(stringResource(Res.string.help_and_feedback_screen_title)),
+                title = AnnotatedString(stringResource(Res.string.about_screen_title)),
                 onBackPressed = onBackPressed,
             )
         },
@@ -38,9 +39,15 @@ fun HelpAndFeedbackScreen(
                     .fillMaxSize()
                     .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Top
             ) {
-                Text("TODO: Help & Feedback")
+                MarkdownText(
+                    content = """
+                        Multipaz Identity Reader version **${BuildConfig.VERSION}**
+                        
+                        Visit [https://apps.multipaz.org](https://apps.multipaz.org) for updates.
+                    """.trimIndent()
+                )
             }
         }
     }

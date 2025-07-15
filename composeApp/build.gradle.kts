@@ -8,7 +8,20 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.buildconfig)
     alias(libs.plugins.ksp)
+}
+
+
+val projectVersionCode: Int by rootProject.extra
+val projectVersionName: String by rootProject.extra
+
+buildConfig {
+    packageName("org.multipaz.identityreader")
+    buildConfigField("VERSION", projectVersionName)
+    buildConfigField("TEST_APP_UPDATE_URL", System.getenv("TEST_APP_UPDATE_URL") ?: "")
+    buildConfigField("TEST_APP_UPDATE_WEBSITE_URL", System.getenv("TEST_APP_UPDATE_WEBSITE_URL") ?: "")
+    useKotlinOutput { internalVisibility = false }
 }
 
 kotlin {

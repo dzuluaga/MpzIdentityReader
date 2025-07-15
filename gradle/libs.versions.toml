@@ -27,6 +27,7 @@ jetbrains-navigation = "2.8.0-alpha13"
 jetbrains-lifecycle = "2.9.1"
 androidx-fragment = "1.8.8"
 compottie = "2.0.0-rc04"
+buildconfig = "5.3.5"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -83,3 +84,4 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }
+buildconfig = { id = "com.github.gmazzo.buildconfig", version.ref = "buildconfig" }
