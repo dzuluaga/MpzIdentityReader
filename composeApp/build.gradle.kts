@@ -19,8 +19,8 @@ val projectVersionName: String by rootProject.extra
 buildConfig {
     packageName("org.multipaz.identityreader")
     buildConfigField("VERSION", projectVersionName)
-    buildConfigField("TEST_APP_UPDATE_URL", System.getenv("TEST_APP_UPDATE_URL") ?: "")
-    buildConfigField("TEST_APP_UPDATE_WEBSITE_URL", System.getenv("TEST_APP_UPDATE_WEBSITE_URL") ?: "")
+    buildConfigField("IDENTITY_READER_UPDATE_URL", System.getenv("IDENTITY_READER_UPDATE_URL") ?: "")
+    buildConfigField("IDENTITY_READER_UPDATE_WEBSITE_URL", System.getenv("IDENTITY_READER_UPDATE_WEBSITE_URL") ?: "")
     useKotlinOutput { internalVisibility = false }
 }
 
@@ -120,6 +120,7 @@ android {
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
