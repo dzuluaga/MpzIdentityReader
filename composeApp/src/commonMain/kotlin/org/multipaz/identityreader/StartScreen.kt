@@ -56,6 +56,8 @@ import org.multipaz.nfc.nfcTagScanningSupportedWithoutDialog
 import org.multipaz.prompt.PromptModel
 import org.multipaz.util.UUID
 
+private const val TAG = "StartScreen"
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StartScreen(

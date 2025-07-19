@@ -51,7 +51,7 @@ import kotlin.math.min
 @Composable
 fun TrustEntryEditorScreen(
     userTrustManager: TrustManagerLocal,
-    entryId: String,
+    entryIndex: Int,
     onBackPressed: () -> Unit,
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -85,7 +85,7 @@ fun TrustEntryEditorScreen(
 
     LaunchedEffect(Unit) {
         coroutineScope.launch {
-            val e = userTrustManager.getEntry(entryId)
+            val e = userTrustManager.getEntries()[entryIndex]
             nameText = TextFieldValue(e.metadata.displayName ?: "")
             newMetadata = e.metadata
             entry.value = e
@@ -227,7 +227,7 @@ fun TrustEntryEditorScreen(
                             onValueChange = {
                                 nameText = it
                                 newMetadata = TrustMetadata(
-                                    displayName = it.text,
+                                    displayName = if (it.text.isNotEmpty()) it.text else null,
                                     displayIcon = newMetadata!!.displayIcon,
                                     privacyPolicyUrl = newMetadata!!.privacyPolicyUrl,
                                     testOnly = newMetadata!!.testOnly

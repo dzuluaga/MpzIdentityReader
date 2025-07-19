@@ -23,6 +23,7 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,9 +36,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.Clock
 import kotlinx.io.bytestring.ByteString
 import multipazidentityreader.composeapp.generated.resources.Res
 import multipazidentityreader.composeapp.generated.resources.about_screen_title
@@ -51,13 +54,18 @@ import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.CompositeTrustManager
+import org.multipaz.trustmanagement.TrustEntryVical
+import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustManager
 import org.multipaz.trustmanagement.TrustManagerLocal
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.Logger
 import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.fromHex
 import org.multipaz.util.toBase64Url
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
 
 data class UrlLaunchData(
     val url: String,
@@ -74,6 +82,10 @@ data class UrlLaunchData(
 class App(
     private val urlLaunchData: UrlLaunchData?
 ) {
+    companion object {
+        private const val TAG = "App"
+    }
+
     private val promptModel = Platform.promptModel
     private var startDestination: String? = null
     private val readerModel = ReaderModel()
@@ -109,47 +121,86 @@ class App(
 
             documentTypeRepository = DocumentTypeRepository()
             documentTypeRepository.addDocumentType(DrivingLicense.getDocumentType())
-            // TODO: Get built-in trusted issuers from reader backend
-            builtInTrustManager = TrustManagerLocal(EphemeralStorage())
-            builtInTrustManager.addX509Cert(
-                certificate = X509Cert(encodedCertificate = "308202a83082022da003020102021036ead7e431722dbf66c76398266f8020300a06082a8648ce3d040303302e311f301d06035504030c164f5746204d756c746970617a20544553542049414341310b300906035504060c025553301e170d3234313230313030303030305a170d3334313230313030303030305a302e311f301d06035504030c164f5746204d756c746970617a20544553542049414341310b300906035504060c0255533076301006072a8648ce3d020106052b8104002203620004f900f27bbd26d8ed2594f5cc8d58f1559cf79b993a6a04fec2287e2fbf5bee3caa525f7db1b7949e9c5a2c3f9c981dc72b7b70900edf995252a1b05cfbd0838648779b1ea7f98a07e51ba569259385605f332463b1f54e0e4a2c1cb0839db3d5a382010e3082010a300e0603551d0f0101ff04040302010630120603551d130101ff040830060101ff020100304c0603551d1204453043864168747470733a2f2f6769746875622e636f6d2f6f70656e77616c6c65742d666f756e646174696f6e2d6c6162732f6964656e746974792d63726564656e7469616c30560603551d1f044f304d304ba049a047864568747470733a2f2f6769746875622e636f6d2f6f70656e77616c6c65742d666f756e646174696f6e2d6c6162732f6964656e746974792d63726564656e7469616c2f63726c301d0603551d0e04160414ab651be056c29053f1dd7f6ce487be68de60c9f5301f0603551d23041830168014ab651be056c29053f1dd7f6ce487be68de60c9f5300a06082a8648ce3d0403030369003066023100e5fec5304626e9ee0456c0421acffa40f38b1f75b7fec4779dea4dfc463ea1dd94d36b3cadec950e0c87f62e580703450231009ed622dee7f933898b37120a06a8362a6ebae99816c4e2d5f928ffbab4bc9f4591a85d526a90d67dafe8793c85d1a246".fromHex()),
-                metadata = TrustMetadata(
-                    displayName = "OWF Multipaz TestApp",
-                    displayIcon = null,
-                    privacyPolicyUrl = "https://apps.multipaz.org",
-                    testOnly = true,
-                )
+            // Note: builtInTrustManager will be populated at app startup, see updateBuiltInIssuers()
+            //   and its call-sites
+            builtInTrustManager = TrustManagerLocal(
+                storage = Platform.storage,
+                identifier = "builtInTrustManager",
             )
-            userTrustManager = TrustManagerLocal(Platform.storage)
+            userTrustManager = TrustManagerLocal(
+                storage = Platform.storage,
+                identifier = "userTrustManager",
+            )
             compositeTrustManager = CompositeTrustManager(listOf(builtInTrustManager, userTrustManager))
 
             settingsModel = SettingsModel.create(Platform.storage)
 
             readerBackendClient = ReaderBackendClient(
                 // Use the deployed backend by default..
-                readerBackendUrl = BuildConfig.IDENTITY_READER_BACKEND_URL,
+                readerBackendUrl = "https://verifier.multipaz.org/identityreaderbackend",
                 //readerBackendUrl = "http://127.0.0.1:8020",
                 storage = Platform.nonBackedUpStorage,
                 httpClientEngineFactory = platformHttpClientEngineFactory(),
                 secureArea = Platform.getSecureArea(),
                 numKeys = 10,
             )
-            try {
-                val (keyInfo, certification) = readerBackendClient.getKey()
-                println("Woohoo replenished key")
-                println("keyInfo $keyInfo")
-                println("certification $certification")
-            } catch (e: Throwable) {
-                println("Error replenishing keys: $e")
-                e.printStackTrace()
+
+            initialized = true
+        }
+    }
+
+    private suspend fun ensureReaderKeys() {
+        try {
+            readerBackendClient.getKey()
+            Logger.i(TAG, "Success ensuring reader keys")
+        } catch (e: Throwable) {
+            Logger.i(TAG, "Error when ensuring reader keys: $e")
+        }
+    }
+
+    private suspend fun updateBuiltInIssuers() {
+        try {
+            val currentVersion = settingsModel.builtInIssuersVersion.value
+            val getTrustedIssuerResult = readerBackendClient.getTrustedIssuers(
+                currentVersion = currentVersion
+            )
+            if (getTrustedIssuerResult != null) {
+                val version = getTrustedIssuerResult.first
+                val entries = getTrustedIssuerResult.second
+                builtInTrustManager.getEntries().forEach {
+                    builtInTrustManager.deleteEntry(it)
+                }
+                entries.forEach {
+                    when (it) {
+                        is TrustEntryX509Cert -> {
+                            builtInTrustManager.addX509Cert(
+                                certificate = it.certificate,
+                                metadata = it.metadata
+                            )
+                        }
+                        is TrustEntryVical -> {
+                            builtInTrustManager.addVical(
+                                encodedSignedVical = it.encodedSignedVical,
+                                metadata = it.metadata
+                            )
+                        }
+                    }
+                }
+                settingsModel.builtInIssuersVersion.value = version
+                settingsModel.builtInIssuersUpdatedAt.value = Clock.System.now()
+                Logger.i(TAG, "Updated built-in issuer list from $currentVersion to version $version")
+            } else {
+                Logger.i(TAG, "No update to built-in issuer list at version $currentVersion")
             }
+        } catch (e: Throwable) {
+            Logger.i(TAG, "Error when checking for updated issuer trust list: $e")
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
     @Composable
     fun Content() {
-        var isInitialized = remember { mutableStateOf<Boolean>(false) }
+        var isInitialized = remember { mutableStateOf<Boolean>(initialized) }
         if (!isInitialized.value) {
             CoroutineScope(Dispatchers.Main).launch {
                 initialize()
@@ -168,6 +219,21 @@ class App(
         PromptDialogs(promptModel)
 
         val coroutineScope = rememberCoroutineScope()
+
+        // At application-startup, update trusted issuers and ensure reader keys.
+        //
+        // Also do this every 4 hours to make sure we pick up updates even if the app keeps running.
+        //
+        LaunchedEffect(Unit) {
+            coroutineScope.launch {
+                while (true) {
+                    ensureReaderKeys()
+                    updateBuiltInIssuers()
+                    delay(4.hours)
+                }
+            }
+        }
+
 
         val navController = rememberNavController()
         val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -323,10 +389,10 @@ class App(
                             userTrustManager = userTrustManager,
                             settingsModel = settingsModel,
                             onBackPressed = { navController.navigateUp() },
-                            onTrustEntryClicked = { trustManagerId, entryId, justImported ->
+                            onTrustEntryClicked = { trustManagerId, entryIndex, justImported ->
                                 navController.navigate(
                                     route = TrustEntryViewerDestination.route +
-                                            "/" + trustManagerId + "/" + entryId + "/" + justImported
+                                            "/" + trustManagerId + "/" + entryIndex + "/" + justImported
                                 )
                             }
                         )
@@ -357,22 +423,22 @@ class App(
                             trustManagerId = backStackEntry.arguments?.getString(
                                 TrustEntryViewerDestination.TRUST_MANAGER_ID
                             )!!,
-                            entryId = backStackEntry.arguments?.getString(
-                                TrustEntryViewerDestination.ENTRY_ID
+                            entryIndex = backStackEntry.arguments?.getInt(
+                                TrustEntryViewerDestination.ENTRY_INDEX
                             )!!,
                             justImported = backStackEntry.arguments?.getBoolean(
                                 TrustEntryViewerDestination.JUST_IMPORTED
                             )!!,
                             onBackPressed = { navController.navigateUp() },
-                            onEditPressed = { entryId ->
+                            onEditPressed = { entryIndex ->
                                 navController.navigate(
-                                    route = TrustEntryEditorDestination.route + "/" + entryId
+                                    route = TrustEntryEditorDestination.route + "/" + entryIndex
                                 )
                             },
-                            onShowVicalEntry = { trustManagerId, entryId, vicalCertNum ->
+                            onShowVicalEntry = { trustManagerId, entryIndex, vicalCertNum ->
                                 navController.navigate(
                                     route = VicalEntryViewerDestination.route +
-                                            "/" + trustManagerId + "/" + entryId + "/" + vicalCertNum
+                                            "/" + trustManagerId + "/" + entryIndex + "/" + vicalCertNum
                                 )
                             },
                             onShowCertificate = { certificate ->
@@ -395,8 +461,8 @@ class App(
                     ) { backStackEntry ->
                         TrustEntryEditorScreen(
                             userTrustManager = userTrustManager,
-                            entryId = backStackEntry.arguments?.getString(
-                                TrustEntryViewerDestination.ENTRY_ID
+                            entryIndex = backStackEntry.arguments?.getInt(
+                                TrustEntryViewerDestination.ENTRY_INDEX
                             )!!,
                             onBackPressed = { navController.navigateUp() },
                         )
@@ -411,8 +477,8 @@ class App(
                             trustManagerId = backStackEntry.arguments?.getString(
                                 VicalEntryViewerDestination.TRUST_MANAGER_ID
                             )!!,
-                            entryId = backStackEntry.arguments?.getString(
-                                VicalEntryViewerDestination.ENTRY_ID
+                            entryIndex = backStackEntry.arguments?.getInt(
+                                VicalEntryViewerDestination.ENTRY_INDEX
                             )!!,
                             certificateIndex = backStackEntry.arguments?.getInt(
                                 VicalEntryViewerDestination.CERTIFICATE_INDEX

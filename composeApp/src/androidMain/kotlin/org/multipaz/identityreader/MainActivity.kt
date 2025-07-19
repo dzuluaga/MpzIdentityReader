@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.fragment.app.FragmentActivity
+import kotlinx.coroutines.runBlocking
 import org.multipaz.context.initializeApplication
 
 class MainActivity : FragmentActivity() {
@@ -21,11 +22,11 @@ class MainActivity : FragmentActivity() {
         } else {
             null
         }
-        println("XXXY onCreate with $invokedForMdocUrl")
         val app = App(urlLaunchData = invokedForMdocUrl?.let { UrlLaunchData(
             url = invokedForMdocUrl,
             finish = { finish() }
         )})
+        runBlocking { app.initialize() }
         setContent {
             app.Content()
         }
@@ -33,11 +34,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        println("XXXY onDestroy")
     }
 
     override fun onNewIntent(intent: Intent) {
-        println("XXXY onNewIntent")
         super.onNewIntent(intent)
     }
 }

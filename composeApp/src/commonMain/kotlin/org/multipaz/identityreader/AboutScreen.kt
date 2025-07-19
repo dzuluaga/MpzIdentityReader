@@ -43,11 +43,16 @@ fun AboutScreen(
             ) {
                 MarkdownText(
                     content = """
-                        Multipaz Identity Reader version **${BuildConfig.VERSION}**
+                        Identity Reader version **${BuildConfig.VERSION}**
+                        
+                        This software is provided as-is and does not come with any guarantees
+                        or promises about its performance, functionality, or fitness for a
+                        particular purpose.
+                        
+                        This is not a supported Google product.
 
-                        Visit [https://apps.multipaz.org](https://apps.multipaz.org) for updates.
-
-                        Reader Backend URL: ${BuildConfig.IDENTITY_READER_BACKEND_URL}
+                        Visit [https://apps.multipaz.org](https://apps.multipaz.org) for more
+                        information and updates.
                     """.trimIndent()
                 )
             }

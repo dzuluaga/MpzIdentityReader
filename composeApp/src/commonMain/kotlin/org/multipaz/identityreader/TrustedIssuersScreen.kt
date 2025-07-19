@@ -130,7 +130,7 @@ fun TrustedIssuersScreen(
     userTrustManager: TrustManagerLocal,
     settingsModel: SettingsModel,
     onBackPressed: () -> Unit,
-    onTrustEntryClicked: (trustManagerId: String, entryId: String, justImported: Boolean) -> Unit
+    onTrustEntryClicked: (trustManagerId: String, entryIndex: Int, justImported: Boolean) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val builtInTrustEntries = remember { mutableStateListOf<TrustEntry>() }
@@ -154,7 +154,7 @@ fun TrustedIssuersScreen(
                             certificate = cert,
                             metadata = TrustMetadata()
                         )
-                        onTrustEntryClicked(TRUST_MANAGER_ID_USER, entry.id, true)
+                        onTrustEntryClicked(TRUST_MANAGER_ID_USER, userTrustManager.getEntries().size - 1, true)
                     } catch (_: TrustPointAlreadyExistsException) {
                         showImportErrorDialog.value = "A certificate with this Subject Key Identifier already exists"
                     } catch (e: Throwable) {
@@ -185,7 +185,7 @@ fun TrustedIssuersScreen(
                             encodedSignedVical = encodedSignedVical,
                             metadata = TrustMetadata()
                         )
-                        onTrustEntryClicked(TRUST_MANAGER_ID_USER, entry.id, true)
+                        onTrustEntryClicked(TRUST_MANAGER_ID_USER, userTrustManager.getEntries().size - 1, true)
                     } catch (e: Throwable) {
                         showImportErrorDialog.value = "Importing VICAL failed: $e"
                     }
@@ -302,7 +302,7 @@ private fun TrustEntryList(
     trustManagerId: String,
     trustEntries: List<TrustEntry>?,
     noTrustPointsText: String,
-    onTrustEntryClicked: (trustManagerId: String, entryId: String, justImported: Boolean) -> Unit
+    onTrustEntryClicked: (trustManagerId: String, entryIndex: Int, justImported: Boolean) -> Unit
 ) {
     if (trustEntries != null && trustEntries.size > 0) {
         trustEntries.forEachIndexed { n, trustEntry ->
@@ -318,7 +318,7 @@ private fun TrustEntryList(
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                     .padding(16.dp)
                     .clickable {
-                        onTrustEntryClicked(trustManagerId, trustEntry.id, false)
+                        onTrustEntryClicked(trustManagerId, n, false)
                     },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {

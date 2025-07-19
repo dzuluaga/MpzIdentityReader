@@ -36,7 +36,7 @@ fun VicalEntryViewerScreen(
     builtInTrustManager: TrustManagerLocal,
     userTrustManager: TrustManagerLocal,
     trustManagerId: String,
-    entryId: String,
+    entryIndex: Int,
     certificateIndex: Int,
     onBackPressed: () -> Unit,
 ) {
@@ -50,7 +50,7 @@ fun VicalEntryViewerScreen(
                 TRUST_MANAGER_ID_USER -> userTrustManager
                 else -> throw IllegalArgumentException()
             }
-            val te = trustManager.getEntry(entryId) as TrustEntryVical
+            val te = trustManager.getEntries()[entryIndex] as TrustEntryVical
             val signedVal = SignedVical.parse(
                 encodedSignedVical = te.encodedSignedVical.toByteArray(),
                 disableSignatureVerification = true

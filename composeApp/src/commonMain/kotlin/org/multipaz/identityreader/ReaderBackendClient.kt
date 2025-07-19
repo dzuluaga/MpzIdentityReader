@@ -16,6 +16,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.cbor.annotation.CborSerializable
@@ -28,6 +29,8 @@ import org.multipaz.securearea.KeyInfo
 import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.trustmanagement.TrustEntry
+import org.multipaz.trustmanagement.fromCbor
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
 import org.multipaz.util.fromBase64Url
@@ -100,9 +103,10 @@ open class ReaderBackendClient(
         val response = httpClient.post(readerBackendUrl + "/" + methodName) {
             setBody(Json.encodeToString(request))
         }
+        val responseBody = response.body<ByteArray>().decodeToString()
         return Pair(
             response.status,
-            Json.decodeFromString<JsonObject>(response.body<ByteArray>().decodeToString())
+            Json.decodeFromString<JsonObject>(responseBody)
         )
     }
 
@@ -326,6 +330,45 @@ open class ReaderBackendClient(
         secureArea.deleteKey(entry.value.alias)
         certifiedKeysTable.delete(key = entry.key)
         certifiedKeys!!.remove(entry.key)
+    }
+
+    suspend fun getTrustedIssuers(currentVersion: Long? = null): Pair<Long, List<TrustEntry>>? {
+        val registrationData = ensureRegistered()
+
+        val (nonceStatus, nonceRespObj) = communicateWithServer("getNonce", buildJsonObject {})
+        check(nonceStatus == HttpStatusCode.OK)
+        val nonceBase64Url = nonceRespObj.get("nonce")!!.jsonPrimitive.content
+        val nonce = nonceBase64Url.fromBase64Url()
+
+        val deviceAssertion = DeviceCheck.generateAssertion(
+            secureArea = Platform.getSecureArea(),
+            deviceAttestationId = registrationData.deviceAttestationId,
+            assertion = AssertionNonce(ByteString(nonce))
+        )
+
+        val (getIssuerListStatus, getIssuerListObj) = communicateWithServer("getIssuerList", buildJsonObject {
+            put("registrationId", registrationData.registrationId)
+            put("nonce", nonceBase64Url)
+            put("deviceAssertion", deviceAssertion.toCbor().toBase64Url())
+            currentVersion?.let { put("currentVersion", currentVersion) }
+        })
+        if (getIssuerListStatus == HttpStatusCode.NotFound) {
+            // This is for handling the case here the server forgot or deleted our registrationId.
+            Logger.w(TAG, "Server returned 404 on getIssuerList. Going to re-register.")
+            val backendRegistrationTable = storage.getTable(backendRegistrationSpec)
+            backendRegistrationTable.delete("default")
+            return getTrustedIssuers(currentVersion)
+        }
+        check(getIssuerListStatus == HttpStatusCode.OK)
+        val entries = mutableListOf<TrustEntry>()
+        val version = getIssuerListObj["version"]?.jsonPrimitive?.long
+        if (version == null) {
+            return null
+        }
+        getIssuerListObj["entries"]!!.jsonArray.forEach {
+            entries.add(TrustEntry.fromCbor(it.jsonPrimitive.content.fromBase64Url()))
+        }
+        return Pair(version, entries)
     }
 
     companion object {

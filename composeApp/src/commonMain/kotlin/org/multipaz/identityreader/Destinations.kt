@@ -50,34 +50,34 @@ const val TRUST_MANAGER_ID_USER = "user"
 data object TrustEntryViewerDestination : Destination {
     override val route = "trust_entry_viewer"
     const val TRUST_MANAGER_ID = "trust_manager_id"
-    const val ENTRY_ID = "entry_id"
+    const val ENTRY_INDEX = "entry_index"
     const val JUST_IMPORTED = "just_imported"
-    val routeWithArgs = "$route/{$TRUST_MANAGER_ID}/{$ENTRY_ID}/{$JUST_IMPORTED}"
+    val routeWithArgs = "$route/{$TRUST_MANAGER_ID}/{$ENTRY_INDEX}/{$JUST_IMPORTED}"
     val arguments = listOf(
         navArgument(TRUST_MANAGER_ID) { type = NavType.StringType },
-        navArgument(ENTRY_ID) { type = NavType.StringType },
+        navArgument(ENTRY_INDEX) { type = NavType.IntType },
         navArgument(JUST_IMPORTED) { type = NavType.BoolType },
     )
 }
 
 data object TrustEntryEditorDestination : Destination {
     override val route = "trust_entry_editor"
-    const val ENTRY_ID = "entry_id"
-    val routeWithArgs = "$route/{$ENTRY_ID}"
+    const val ENTRY_INDEX = "entry_index"
+    val routeWithArgs = "$route/{$ENTRY_INDEX}"
     val arguments = listOf(
-        navArgument(ENTRY_ID) { type = NavType.StringType },
+        navArgument(ENTRY_INDEX) { type = NavType.IntType },
     )
 }
 
 data object VicalEntryViewerDestination : Destination {
     override val route = "vical_entry_viewer"
     const val TRUST_MANAGER_ID = "trust_manager_id"
-    const val ENTRY_ID = "entry_id"
+    const val ENTRY_INDEX = "entry_index"
     const val CERTIFICATE_INDEX = "certificate_index"
-    val routeWithArgs = "$route/{$TRUST_MANAGER_ID}/{$ENTRY_ID}/{$CERTIFICATE_INDEX}"
+    val routeWithArgs = "$route/{$TRUST_MANAGER_ID}/{$ENTRY_INDEX}/{$CERTIFICATE_INDEX}"
     val arguments = listOf(
         navArgument(TRUST_MANAGER_ID) { type = NavType.StringType },
-        navArgument(ENTRY_ID) { type = NavType.StringType },
+        navArgument(ENTRY_INDEX) { type = NavType.IntType },
         navArgument(CERTIFICATE_INDEX) { type = NavType.IntType },
     )
 }

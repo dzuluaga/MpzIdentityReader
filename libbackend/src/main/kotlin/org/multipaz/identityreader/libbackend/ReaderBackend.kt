@@ -8,13 +8,16 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.cbor.annotation.CborSerializable
 import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.EcPublicKey
 import org.multipaz.crypto.X500Name
@@ -22,12 +25,15 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.device.AssertionNonce
 import org.multipaz.device.DeviceAssertion
 import org.multipaz.device.DeviceAttestation
+import org.multipaz.device.DeviceAttestationAndroid
+import org.multipaz.device.DeviceAttestationException
 import org.multipaz.device.DeviceAttestationValidationData
 import org.multipaz.device.fromCbor
-import org.multipaz.device.toCbor
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
+import org.multipaz.trustmanagement.TrustEntry
+import org.multipaz.trustmanagement.toCbor
 import org.multipaz.util.fromBase64Url
 import org.multipaz.util.toBase64Url
 import kotlin.random.Random
@@ -35,8 +41,29 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
+ * Data stored for each registered client.
+ *
+ * The [deviceAttestation] field is obtained at registration time and used at every future interaction to
+ * ensure we're talking to the same device.
+ *
+ * @param deviceAttestation the device attestation we received at registration time.
+ * @param deviceIsTrusted set to true if the device integrity could was validated at registration time.
+ */
+@CborSerializable
+data class ClientData(
+    val deviceAttestation: DeviceAttestation,
+    val deviceIsTrusted: Boolean,
+) {
+    companion object {
+        const val SCHEMA_VERSION = 1L
+    }
+}
+
+/**
  * A reference implementation of the reader backend.
  *
+ * @param readerRootKeyForUntrustedDevices the private key for the reader root.
+ * @param readerRootCertChainForUntrustedDevices the certification for [readerRootKeyForUntrustedDevices].
  * @param readerRootKey the private key for the reader root.
  * @param readerRootCertChain the certification for [readerRootKey].
  * @param readerCertDuration the amount of time the issued certificates will be valid for.
@@ -55,6 +82,8 @@ import kotlin.time.Duration.Companion.seconds
  * @param random the [Random] source to use.
  */
 open class ReaderBackend(
+    private val readerRootKeyForUntrustedDevices: EcPrivateKey,
+    private val readerRootCertChainForUntrustedDevices: X509CertChain,
     private val readerRootKey: EcPrivateKey,
     private val readerRootCertChain: X509CertChain,
     private val readerCertDuration: DateTimePeriod,
@@ -63,11 +92,12 @@ open class ReaderBackend(
     private val androidGmsAttestation: Boolean,
     private val androidVerifiedBootGreen: Boolean,
     private val androidAppSignatureCertificateDigests: List<ByteString>,
+    private val issuerTrustListVersion: Long,
+    private val issuerTrustList: List<TrustEntry>,
     private val getStorageTable: suspend (spec: StorageTableSpec) -> StorageTable,
     private val getCurrentTime: () -> Instant = { Clock.System.now() },
     private val random: Random = Random.Default
 ) {
-
     suspend fun handleGetNonce(
         request: JsonObject,
     ): Pair<HttpStatusCode, JsonObject> {
@@ -102,21 +132,35 @@ open class ReaderBackend(
             request["deviceAttestation"]!!.jsonPrimitive.content.fromBase64Url()
         )
 
-        // Check the attestation...
-        deviceAttestation.validate(
-            DeviceAttestationValidationData(
-                attestationChallenge = ByteString(nonce),
-                iosReleaseBuild = iosReleaseBuild,
-                iosAppIdentifier = iosAppIdentifier,
-                androidGmsAttestation = androidGmsAttestation,
-                androidVerifiedBootGreen = androidVerifiedBootGreen,
-                androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+        var deviceIsTrusted = false
+        try {
+            // Check the attestation...
+            deviceAttestation.validate(
+                DeviceAttestationValidationData(
+                    attestationChallenge = ByteString(nonce),
+                    iosReleaseBuild = iosReleaseBuild,
+                    iosAppIdentifier = iosAppIdentifier,
+                    androidGmsAttestation = androidGmsAttestation,
+                    androidVerifiedBootGreen = androidVerifiedBootGreen,
+                    androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
+                )
             )
-        )
+            // For now we only trust Android devices...
+            if (deviceAttestation is DeviceAttestationAndroid) {
+                deviceIsTrusted = true
+            }
+        } catch (e: DeviceAttestationException) {
+            e.printStackTrace()
+            println("Device is untrusted: $e")
+        }
 
+        val clientData = ClientData(
+            deviceAttestation = deviceAttestation,
+            deviceIsTrusted = deviceIsTrusted,
+        )
         val id = clientsTable.insert(
             key = null,
-            data = ByteString(deviceAttestation.toCbor())
+            data = ByteString(clientData.toCbor())
         )
         return Pair(
             HttpStatusCode.OK,
@@ -130,11 +174,10 @@ open class ReaderBackend(
         request: JsonObject,
     ): Pair<HttpStatusCode, JsonObject> {
         val noncesTable = getStorageTable(nonceTableSpec)
-        val deviceAttestationsTable = getStorageTable(clientTableSpec)
-
+        val clientTable = getStorageTable(clientTableSpec)
         val id = request["registrationId"]!!.jsonPrimitive.content
-        val deviceAttestationCbor = deviceAttestationsTable.get(key = id)
-        if (deviceAttestationCbor == null) {
+        val encodedClientData = clientTable.get(key = id)
+        if (encodedClientData == null) {
             // Return a 404 here to convey to the client that we don't know this registration ID. This is
             // helpful for the client because they can go ahead and re-register instead of just failing in
             // perpetuity. This is helpful for example if all storage for a server is deleted, that way
@@ -145,7 +188,14 @@ open class ReaderBackend(
                 buildJsonObject {}
             )
         }
-        val deviceAttestation = DeviceAttestation.fromCbor(deviceAttestationCbor.toByteArray())
+        val clientData = ClientData.fromCbor(encodedClientData.toByteArray())
+
+        // Pick the right reader root CA, depending on if we trust the client.
+        val (chosenReaderRootKey, chosenReaderRootCertChain) = if (clientData.deviceIsTrusted) {
+            Pair(readerRootKey, readerRootCertChain)
+        } else {
+            Pair(readerRootKeyForUntrustedDevices, readerRootCertChainForUntrustedDevices)
+        }
 
         val nonceBase64Url = request["nonce"]!!.jsonPrimitive.content
         if (noncesTable.get(key = nonceBase64Url) == null) {
@@ -157,7 +207,7 @@ open class ReaderBackend(
         val deviceAssertion = DeviceAssertion.fromCbor(deviceAssertionBase64Url.fromBase64Url())
         check(deviceAssertion.assertion is AssertionNonce)
         check((deviceAssertion.assertion as AssertionNonce).nonce == ByteString(nonce))
-        deviceAttestation.validateAssertion(deviceAssertion)
+        clientData.deviceAttestation.validateAssertion(deviceAssertion)
 
         val keysToCertify = request["keys"]!!.jsonArray
         val readerCertifications = mutableListOf<X509CertChain>()
@@ -170,15 +220,15 @@ open class ReaderBackend(
             val validUntil = now.plus(readerCertDuration, TimeZone.currentSystemDefault()) + jitterUntil
             val key = EcPublicKey.fromJwk(keyJwk.jsonObject)
             val readerCert = MdocUtil.generateReaderCertificate(
-                readerRootCert = readerRootCertChain.certificates[0],
-                readerRootKey = readerRootKey,
+                readerRootCert = chosenReaderRootCertChain.certificates[0],
+                readerRootKey = chosenReaderRootKey,
                 readerKey = key,
                 subject = X500Name.fromName("CN=Multipaz Identity Verifier Single-Use Key"),
                 serial = ASN1Integer.fromRandom(numBits = 128, random = random),
                 validFrom = validFrom,
                 validUntil = validUntil
             )
-            val readerCertChain = X509CertChain(listOf(readerCert) + readerRootCertChain.certificates)
+            val readerCertChain = X509CertChain(listOf(readerCert) + chosenReaderRootCertChain.certificates)
             readerCertifications.add(readerCertChain)
         }
 
@@ -194,6 +244,56 @@ open class ReaderBackend(
         )
     }
 
+    suspend fun handleGetIssuerList(
+        request: JsonObject,
+    ): Pair<HttpStatusCode, JsonObject> {
+        val noncesTable = getStorageTable(nonceTableSpec)
+        val clientTable = getStorageTable(clientTableSpec)
+        val id = request["registrationId"]!!.jsonPrimitive.content
+        val encodedClientData = clientTable.get(key = id)
+        if (encodedClientData == null) {
+            // Return a 404 here to convey to the client that we don't know this registration ID. This is
+            // helpful for the client because they can go ahead and re-register instead of just failing in
+            // perpetuity. This is helpful for example if all storage for a server is deleted, that way
+            // all clients will just re-register and there will be no loss in service.
+            //
+            return Pair(
+                HttpStatusCode.NotFound,
+                buildJsonObject {}
+            )
+        }
+        val clientData = ClientData.fromCbor(encodedClientData.toByteArray())
+
+        val nonceBase64Url = request["nonce"]!!.jsonPrimitive.content
+        if (noncesTable.get(key = nonceBase64Url) == null) {
+            throw IllegalArgumentException("Unknown nonce")
+        }
+        val nonce = nonceBase64Url.fromBase64Url()
+
+        val deviceAssertionBase64Url = request["deviceAssertion"]!!.jsonPrimitive.content
+        val deviceAssertion = DeviceAssertion.fromCbor(deviceAssertionBase64Url.fromBase64Url())
+        check(deviceAssertion.assertion is AssertionNonce)
+        check((deviceAssertion.assertion as AssertionNonce).nonce == ByteString(nonce))
+        clientData.deviceAttestation.validateAssertion(deviceAssertion)
+
+        val currentVersion = request["currentVersion"]?.jsonPrimitive?.longOrNull
+        return Pair(
+            HttpStatusCode.OK,
+            buildJsonObject {
+                if (currentVersion != issuerTrustListVersion) {
+                    put("version", issuerTrustListVersion)
+                    putJsonArray("entries") {
+                        issuerTrustList.forEach {
+                            add(it.toCbor().toBase64Url())
+                        }
+                    }
+                }
+            }
+        )
+
+    }
+
+
     companion object {
         private val nonceTableSpec = StorageTableSpec(
             name = "ReaderBackendNonces",
@@ -206,7 +306,8 @@ open class ReaderBackend(
         private val clientTableSpec = StorageTableSpec(
             name = "ReaderBackendClients",
             supportPartitions = false,
-            supportExpiration = false   // TODO: maybe consider using expiration
+            supportExpiration = false,   // TODO: maybe consider using expiration
+            schemaVersion = ClientData.SCHEMA_VERSION
         )
     }
 

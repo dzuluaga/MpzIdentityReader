@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.multipaz.asn1.OID
 import org.multipaz.compose.decodeImage
+import org.multipaz.mdoc.vical.SignedVical
 import org.multipaz.trustmanagement.TrustEntry
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert
@@ -49,7 +50,12 @@ val TrustEntry.displayTypeName: String
                 return "IACA certificate"
             }
             is TrustEntryVical -> {
-                return "VICAL containing $numCertificates IACA certificates"
+                // TODO: if this is slow we can use memoization to speed it up
+                val signedVical = SignedVical.parse(
+                    encodedSignedVical.toByteArray(),
+                    disableSignatureVerification = true
+                )
+                return "VICAL containing ${signedVical.vical.certificateInfos.size} IACA certificates"
             }
         }
     }

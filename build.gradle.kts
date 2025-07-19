@@ -65,4 +65,5 @@ plugins {
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
     alias(libs.plugins.buildconfig) apply false
+    alias(libs.plugins.ksp) apply false
 }

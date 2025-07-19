@@ -5,11 +5,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
+import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.EcCurve
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
@@ -63,6 +65,8 @@ class SettingsModel private constructor(
         val value = settingsTable.get(key)?.let {
             val dataItem = Cbor.decode(it.toByteArray())
             when (T::class) {
+                Instant::class -> { dataItem.asDateTimeString as T }
+                Long::class -> { dataItem.asNumber as T }
                 Boolean::class -> { dataItem.asBoolean as T }
                 String::class -> { dataItem.asTstr as T }
                 List::class -> { dataItem.asArray.map { item -> (item as Tstr).value } as T }
@@ -76,6 +80,14 @@ class SettingsModel private constructor(
             CoroutineScope(Dispatchers.Default).launch {
                 variable.asStateFlow().collect { newValue ->
                     val dataItem = when (T::class) {
+                        Instant::class -> {
+                            (newValue as Instant).toDataItemDateTimeString()
+                        }
+
+                        Long::class -> {
+                            (newValue as Long).toDataItem()
+                        }
+
                         Boolean::class -> {
                             (newValue as Boolean).toDataItem()
                         }
@@ -119,8 +131,12 @@ class SettingsModel private constructor(
     private suspend fun init() {
         bind(logTransactions, "logTransactions", false)
         bind(selectedQueryName, "selectedQueryName", ReaderQuery.AGE_OVER_21.name)
+        bind(builtInIssuersUpdatedAt, "builtInIssuersUpdatedAt", Instant.DISTANT_PAST)
+        bind(builtInIssuersVersion, "builtInIssuersVersion", Long.MIN_VALUE)
     }
 
     val logTransactions = MutableStateFlow<Boolean>(false)
     val selectedQueryName = MutableStateFlow<String>(ReaderQuery.AGE_OVER_21.name)
+    val builtInIssuersUpdatedAt = MutableStateFlow<Instant>(Instant.DISTANT_PAST)
+    val builtInIssuersVersion = MutableStateFlow<Long>(Long.MIN_VALUE)
 }

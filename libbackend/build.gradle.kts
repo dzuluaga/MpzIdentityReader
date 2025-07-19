@@ -1,24 +1,20 @@
 plugins {
-    alias(libs.plugins.kotlinMultiplatform)
-    id("maven-publish")
+    id("java-library")
+    id("org.jetbrains.kotlin.jvm")
+    alias(libs.plugins.ksp)
 }
 
 kotlin {
     jvmToolchain(17)
+}
 
-    jvm()
-
-    sourceSets {
-        val commonMain by getting {
-            dependencies {
-                implementation(libs.multipaz)
-                implementation(libs.kotlinx.datetime)
-                implementation(libs.kotlinx.serialization.json)
-                implementation(libs.kotlinx.coroutines.core)
-                implementation(libs.kotlinx.io.bytestring)
-            }
-        }
-    }
+dependencies {
+    ksp(libs.multipaz.cbor.rpc)
+    implementation(libs.multipaz)
+    implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.io.bytestring)
 }
 
 java {

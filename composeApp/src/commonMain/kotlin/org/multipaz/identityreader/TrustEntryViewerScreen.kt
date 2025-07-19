@@ -60,11 +60,11 @@ fun TrustEntryViewerScreen(
     builtInTrustManager: TrustManagerLocal,
     userTrustManager: TrustManagerLocal,
     trustManagerId: String,
-    entryId: String,
+    entryIndex: Int,
     justImported: Boolean,
     onBackPressed: () -> Unit,
-    onEditPressed: (entryId: String) -> Unit,
-    onShowVicalEntry: (trustManagerId: String, entryId: String, vicalCertNum: Int) -> Unit,
+    onEditPressed: (entryIndex: Int) -> Unit,
+    onShowVicalEntry: (trustManagerId: String, entryIndex: Int, vicalCertNum: Int) -> Unit,
     onShowCertificate: (certificate: X509Cert) -> Unit,
     onShowCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
@@ -79,7 +79,7 @@ fun TrustEntryViewerScreen(
                 TRUST_MANAGER_ID_USER -> userTrustManager
                 else -> throw IllegalArgumentException()
             }
-            entry.value = trustManager.getEntry(entryId)
+            entry.value = trustManager.getEntries()[entryIndex]
         }
     }
 
@@ -141,7 +141,7 @@ fun TrustEntryViewerScreen(
                 actions = {
                     if (trustManagerId == TRUST_MANAGER_ID_USER) {
                         IconButton(
-                            onClick = { onEditPressed(entryId) }
+                            onClick = { onEditPressed(entryIndex) }
                         ) {
                             Icon(
                                 imageVector = Icons.Filled.Edit,
@@ -235,7 +235,7 @@ fun TrustEntryViewerScreen(
                             is TrustEntryVical -> {
                                 VicalDetails(
                                     trustManagerId = trustManagerId,
-                                    entryId = entryId,
+                                    entryIndex = entryIndex,
                                     trustEntry = trustEntry,
                                     onShowVicalEntry = onShowVicalEntry,
                                     onShowCertificate = onShowCertificate,
@@ -253,9 +253,9 @@ fun TrustEntryViewerScreen(
 @Composable
 private fun VicalDetails(
     trustManagerId: String,
-    entryId: String,
+    entryIndex: Int,
     trustEntry: TrustEntryVical,
-    onShowVicalEntry: (trustManagerId: String, entryId: String, vicalCertNum: Int) -> Unit,
+    onShowVicalEntry: (trustManagerId: String, entryIndex: Int, vicalCertNum: Int) -> Unit,
     onShowCertificate: (certificate: X509Cert) -> Unit,
     onShowCertificateChain: (certificateChain: X509CertChain) -> Unit,
 ) {
@@ -315,7 +315,7 @@ private fun VicalDetails(
                     .clip(shape = RoundedCornerShape(startRound, startRound, endRound, endRound))
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest)
                     .padding(16.dp)
-                    .clickable { onShowVicalEntry(trustManagerId, entryId, n) },
+                    .clickable { onShowVicalEntry(trustManagerId, entryIndex, n) },
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 CompositionLocalProvider(

@@ -1,5 +1,6 @@
 package org.multipaz.identityreader
 
+import android.content.pm.PackageManager
 import androidx.test.platform.app.InstrumentationRegistry
 import io.ktor.client.engine.cio.CIO
 import io.ktor.http.HttpStatusCode
@@ -7,14 +8,18 @@ import junit.framework.TestCase.assertTrue
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DateTimePeriod
 import kotlinx.datetime.Instant
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.json.JsonObject
 import org.junit.Before
 import org.junit.Test
 import org.multipaz.asn1.ASN1Integer
+import org.multipaz.context.applicationContext
 import org.multipaz.context.initializeApplication
+import org.multipaz.crypto.Algorithm
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
 import org.multipaz.crypto.X500Name
+import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.identityreader.libbackend.ReaderBackend
 import org.multipaz.mdoc.util.MdocUtil
@@ -22,7 +27,13 @@ import org.multipaz.securearea.AndroidKeystoreSecureArea
 import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.ephemeral.EphemeralStorage
+import org.multipaz.trustmanagement.TrustEntry
+import org.multipaz.trustmanagement.TrustEntryVical
+import org.multipaz.trustmanagement.TrustEntryX509Cert
+import org.multipaz.trustmanagement.TrustMetadata
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.fail
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
@@ -33,6 +44,9 @@ class ReaderBackendTest {
         serverStorage: Storage,
         secureArea: SecureArea,
         numKeys: Int,
+        androidAppSignatureCertificateDigests: List<ByteString> = emptyList(),
+        issueTrustListVersion: Long = Long.MIN_VALUE,
+        issuerTrustList: List<TrustEntry> = emptyList()
     ) : ReaderBackendClient(
         readerBackendUrl = "not-used",
         storage = clientStorage,
@@ -40,6 +54,20 @@ class ReaderBackendTest {
         secureArea = secureArea,
         numKeys = numKeys
     ) {
+        private val readerRootKeyForUntrustedDevices = Crypto.createEcPrivateKey(EcCurve.P384)
+        val readerRootCertChainForUntrustedDevices = X509CertChain(
+            listOf(
+                MdocUtil.generateReaderRootCertificate(
+                    readerRootKey = readerRootKeyForUntrustedDevices,
+                    subject = X500Name.fromName("CN=TEST Reader Root (Untrusted Devices)"),
+                    serial = ASN1Integer.fromRandom(numBits = 128),
+                    validFrom = Instant.parse("2024-07-01T06:00:00Z"),
+                    validUntil = Instant.parse("2030-07-01T06:00:00Z"),
+                    crlUrl = "https://www.example.com/crl"
+                )
+            )
+        )
+
         private val readerRootKey = Crypto.createEcPrivateKey(EcCurve.P384)
         val readerRootCertChain = X509CertChain(
             listOf(
@@ -61,6 +89,8 @@ class ReaderBackendTest {
         }
 
         private val backend = ReaderBackend(
+            readerRootKeyForUntrustedDevices = readerRootKeyForUntrustedDevices,
+            readerRootCertChainForUntrustedDevices = readerRootCertChainForUntrustedDevices,
             readerRootKey = readerRootKey,
             readerRootCertChain = readerRootCertChain,
             readerCertDuration = DateTimePeriod(days = 30),
@@ -68,7 +98,9 @@ class ReaderBackendTest {
             iosAppIdentifier = null,
             androidGmsAttestation = false,
             androidVerifiedBootGreen = false,
-            androidAppSignatureCertificateDigests = listOf(),
+            androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests,
+            issuerTrustListVersion = issueTrustListVersion,
+            issuerTrustList = issuerTrustList,
             getStorageTable = { spec -> serverStorage_.getTable(spec) },
             getCurrentTime = { currentTime }
         )
@@ -89,6 +121,7 @@ class ReaderBackendTest {
                 "getNonce" -> backend.handleGetNonce(request)
                 "register" -> backend.handleRegister(request)
                 "certifyKeys" -> backend.handleCertifyKeys(request)
+                "getIssuerList" -> backend.handleGetIssuerList(request)
                 else -> throw IllegalArgumentException("Unexpected method $methodName")
             }
         }
@@ -101,18 +134,50 @@ class ReaderBackendTest {
 
     @Test
     fun testHappyPath() = runTest {
+        val ownAppSignatureCertificateDigests = mutableListOf<ByteString>()
+        val pkg = applicationContext.packageManager
+            .getPackageInfo(applicationContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        pkg.signingInfo!!.apkContentsSigners.forEach { signatureInfo ->
+            ownAppSignatureCertificateDigests.add(
+                ByteString(Crypto.digest(Algorithm.SHA256, signatureInfo.toByteArray()))
+            )
+        }
+        testHappyPathWithBackend(
+            expectedUntrustedDevice = false,
+            androidAppSignatureCertificateDigests = ownAppSignatureCertificateDigests
+        )
+    }
+
+    @Test
+    fun testHappyPathUntrustedDevice() = runTest {
+        testHappyPathWithBackend(
+            expectedUntrustedDevice = true,
+            androidAppSignatureCertificateDigests = listOf(ByteString(1, 2, 3))
+        )
+    }
+
+    fun testHappyPathWithBackend(
+        expectedUntrustedDevice: Boolean,
+        androidAppSignatureCertificateDigests: List<ByteString>
+    ) = runTest {
         val clientStorage = EphemeralStorage()
         val serverStorage = EphemeralStorage()
         val client = LoopbackReaderBackendClient(
             clientStorage = clientStorage,
             serverStorage = serverStorage,
             secureArea = AndroidKeystoreSecureArea.create(clientStorage),
-            numKeys = 10
+            numKeys = 10,
+            androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
         )
         val (_, certChain) = client.getKey(client.currentTime)
         assertTrue(certChain.validate())
         assertEquals(2, certChain.certificates.size)
-        assertEquals(client.readerRootCertChain.certificates[0], certChain.certificates[1])
+
+        if (expectedUntrustedDevice) {
+            assertEquals(client.readerRootCertChainForUntrustedDevices.certificates[0], certChain.certificates[1])
+        } else {
+            assertEquals(client.readerRootCertChain.certificates[0], certChain.certificates[1])
+        }
 
         // Check validity dates, taking into account the jitter the server injects.
         val readerCert = certChain.certificates[0]
@@ -137,7 +202,8 @@ class ReaderBackendTest {
             clientStorage = clientStorage,
             serverStorage = serverStorage,
             secureArea = AndroidKeystoreSecureArea.create(clientStorage),
-            numKeys = 10
+            numKeys = 10,
+            androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
         )
         val (keyInfo, _) = client2.getKey(client2.currentTime)
         client2.markKeyAsUsed(keyInfo)
@@ -321,5 +387,46 @@ class ReaderBackendTest {
         client.setServerStorage(EphemeralStorage())
         val (_, _) = client.getKey(client.currentTime)
         assertEquals(10, client.numRpc)
+    }
+
+    @Test
+    fun testIssuerTrustList() = runTest {
+        val issuerTrustList1 = listOf(
+            TrustEntryX509Cert(
+                metadata = TrustMetadata(displayName = "foo", displayIcon = ByteString(1, 2, 3)),
+                certificate = X509Cert(byteArrayOf(10, 11, 12))
+            ),
+            TrustEntryVical(
+                metadata = TrustMetadata(displayName = "bar", displayIcon = ByteString(4, 5, 6)),
+                encodedSignedVical = ByteString(20, 21, 22)
+            ),
+        )
+
+        val clientStorage = EphemeralStorage()
+        val serverStorage = EphemeralStorage()
+        val client = LoopbackReaderBackendClient(
+            clientStorage = clientStorage,
+            serverStorage = serverStorage,
+            secureArea = AndroidKeystoreSecureArea.create(clientStorage),
+            numKeys = 10,
+            issueTrustListVersion = 42L,
+            issuerTrustList = issuerTrustList1
+        )
+
+        val issuerListsFromServer = client.getTrustedIssuers(currentVersion = null)
+        assertNotNull(issuerListsFromServer)
+        assertEquals(42L, issuerListsFromServer.first)
+        assertEquals(issuerTrustList1, issuerListsFromServer.second)
+
+        assertNull(client.getTrustedIssuers(currentVersion = 42L))
+        assertEquals(issuerListsFromServer, client.getTrustedIssuers(currentVersion = 41L))
+        assertEquals(issuerListsFromServer, client.getTrustedIssuers(currentVersion = 43L))
+        assertEquals(issuerListsFromServer, client.getTrustedIssuers(currentVersion = null))
+
+        val (_, certChain) = client.getKey(client.currentTime)
+        assertTrue(certChain.validate())
+        assertEquals(2, certChain.certificates.size)
+        assertEquals(client.readerRootCertChain.certificates[0], certChain.certificates[1])
+
     }
 }
