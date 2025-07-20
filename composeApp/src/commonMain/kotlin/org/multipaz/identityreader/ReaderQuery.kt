@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.crypto.Algorithm
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.request.DeviceRequestGenerator
@@ -35,30 +36,58 @@ enum class ReaderQuery(
         encodedSessionTranscript: ByteString,
         readerBackendClient: ReaderBackendClient
     ): ByteString {
-        val (keyInfo, keyCertification) = try {
-            readerBackendClient.getKey()
-        } catch (e: Throwable) {
-            println("Error getting certified reader key, proceeding without reader authentication: $e")
-            Pair(null, null)
+        val deviceRequest = when (settingsModel.readerAuthMethod.value) {
+            ReaderAuthMethod.NO_READER_AUTH -> {
+                generateEncodedDeviceRequest(
+                    query = this,
+                    intentToRetain = settingsModel.logTransactions.value,
+                    encodedSessionTranscript = encodedSessionTranscript.toByteArray(),
+                    readerKey = null,
+                    readerKeyAlias = null,
+                    readerKeySecureArea = null,
+                    readerKeyCertification = null
+                )
+            }
+            ReaderAuthMethod.STANDARD_READER_AUTH -> {
+                val (keyInfo, keyCertification) = try {
+                    readerBackendClient.getKey()
+                } catch (e: Throwable) {
+                    println("Error getting certified reader key, proceeding without reader authentication: $e")
+                    Pair(null, null)
+                }
+                generateEncodedDeviceRequest(
+                    query = this,
+                    intentToRetain = settingsModel.logTransactions.value,
+                    encodedSessionTranscript = encodedSessionTranscript.toByteArray(),
+                    readerKey = null,
+                    readerKeyAlias = keyInfo?.alias,
+                    readerKeySecureArea = keyInfo?.let { readerBackendClient.secureArea },
+                    readerKeyCertification = keyCertification
+                ).also {
+                    keyInfo?.let { readerBackendClient.markKeyAsUsed(it) }
+                }
+            }
+            ReaderAuthMethod.CUSTOM_KEY -> {
+                generateEncodedDeviceRequest(
+                    query = this,
+                    intentToRetain = settingsModel.logTransactions.value,
+                    encodedSessionTranscript = encodedSessionTranscript.toByteArray(),
+                    readerKey = settingsModel.customReaderAuthKey.value!!,
+                    readerKeyAlias = null,
+                    readerKeySecureArea = null,
+                    readerKeyCertification = settingsModel.customReaderAuthCertChain.value!!
+                )
+            }
         }
-        val deviceRequest = ByteString(generateEncodedDeviceRequest(
-            query = this,
-            intentToRetain = settingsModel.logTransactions.value,
-            encodedSessionTranscript = encodedSessionTranscript.toByteArray(),
-            readerKeyAlias = keyInfo?.alias,
-            readerKeySecureArea = keyInfo?.let { readerBackendClient.secureArea },
-            readerKeyCertification = keyCertification
-        ))
-        keyInfo?.let { readerBackendClient.markKeyAsUsed(it) }
-        return deviceRequest
+        return ByteString(deviceRequest)
     }
 }
-
 
 suspend fun generateEncodedDeviceRequest(
     query: ReaderQuery,
     intentToRetain: Boolean,
     encodedSessionTranscript: ByteArray,
+    readerKey: EcPrivateKey?,
     readerKeyAlias: String?,
     readerKeySecureArea: SecureArea?,
     readerKeyCertification: X509CertChain?
@@ -98,7 +127,16 @@ suspend fun generateEncodedDeviceRequest(
     // TODO: for now we're only requesting an mDL, in the future we might request many different doctypes
 
     val deviceRequestGenerator = DeviceRequestGenerator(encodedSessionTranscript)
-    if (readerKeyAlias != null) {
+    if (readerKey != null) {
+        deviceRequestGenerator.addDocumentRequest(
+            docType = docType,
+            itemsToRequest = itemsToRequest,
+            requestInfo = null,
+            readerKey = readerKey,
+            signatureAlgorithm = readerKey.curve.defaultSigningAlgorithmFullySpecified,
+            readerKeyCertificateChain = readerKeyCertification,
+        )
+    } else if (readerKeyAlias != null) {
         deviceRequestGenerator.addDocumentRequest(
             docType = docType,
             itemsToRequest = itemsToRequest,

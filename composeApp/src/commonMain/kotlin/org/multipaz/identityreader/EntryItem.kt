@@ -13,7 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun KvPairDisplay(
+fun EntryItem(
     key: String,
     valueText: AnnotatedString,
     modifier: Modifier = Modifier,
@@ -28,17 +28,16 @@ fun KvPairDisplay(
         )
         SelectionContainer {
             Text(
+                style = MaterialTheme.typography.bodyMedium,
                 text = valueText,
-                style = MaterialTheme.typography.bodyMedium
             )
         }
     }
 }
 
-
 @Composable
-fun KvPairDisplay(
+fun EntryItem(
     key: String,
     valueText: String,
     modifier: Modifier = Modifier,
-) = KvPairDisplay(key, AnnotatedString(valueText), modifier)
+) = EntryItem(key, AnnotatedString(valueText), modifier)

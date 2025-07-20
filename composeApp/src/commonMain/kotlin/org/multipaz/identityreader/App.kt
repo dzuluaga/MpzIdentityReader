@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Help
 import androidx.compose.material.icons.outlined.AccountBalance
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -44,6 +45,7 @@ import kotlinx.datetime.Clock
 import kotlinx.io.bytestring.ByteString
 import multipazidentityreader.composeapp.generated.resources.Res
 import multipazidentityreader.composeapp.generated.resources.about_screen_title
+import multipazidentityreader.composeapp.generated.resources.settings_screen_title
 import multipazidentityreader.composeapp.generated.resources.trusted_issuers_screen_title
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.cbor.Cbor
@@ -150,6 +152,10 @@ class App(
     }
 
     private suspend fun ensureReaderKeys() {
+        if (settingsModel.readerAuthMethod.value != ReaderAuthMethod.STANDARD_READER_AUTH) {
+            Logger.i(TAG, "Not using standard reader auth so not ensuring keys")
+            return
+        }
         try {
             readerBackendClient.getKey()
             Logger.i(TAG, "Success ensuring reader keys")
@@ -257,14 +263,14 @@ class App(
                             NavigationDrawerItem(
                                 icon = {
                                     Icon(
-                                        imageVector = Icons.Outlined.AccountBalance,
+                                        imageVector = Icons.Outlined.Settings,
                                         contentDescription = null
                                     )
                                 },
-                                label = { Text(text = stringResource(Res.string.trusted_issuers_screen_title)) },
+                                label = { Text(text = stringResource(Res.string.settings_screen_title)) },
                                 selected = false,
                                 onClick = {
-                                    navController.navigate(route = TrustedIssuersDestination.route)
+                                    navController.navigate(route = SettingsDestination.route)
                                     coroutineScope.launch { drawerState.close() }
                                 }
                             )
@@ -381,6 +387,31 @@ class App(
                             documentTypeRepository = documentTypeRepository,
                             issuerTrustManager = compositeTrustManager,
                             onBackPressed = { urlLaunchData?.finish() ?: navController.navigateUp() },
+                        )
+                    }
+                    composable(route = SettingsDestination.route) {
+                        SettingsScreen(
+                            onBackPressed = { navController.navigateUp() },
+                            onReaderIdentityPressed = {
+                                navController.navigate(ReaderIdentityDestination.route)
+                            },
+                            onTrustedIssuersPressed = {
+                                navController.navigate(TrustedIssuersDestination.route)
+                            }
+                        )
+                    }
+                    composable(route = ReaderIdentityDestination.route) {
+                        ReaderIdentityScreen(
+                            promptModel = promptModel,
+                            readerBackendClient = readerBackendClient,
+                            settingsModel = settingsModel,
+                            onBackPressed = { navController.navigateUp() },
+                            onShowCertificateChain = { certificateChain ->
+                                val certificateDataBase64 = Cbor.encode(certificateChain.toDataItem()).toBase64Url()
+                                navController.navigate(
+                                    route = CertificateViewerDestination.route + "/" + certificateDataBase64
+                                )
+                            },
                         )
                     }
                     composable(route = TrustedIssuersDestination.route) {

@@ -249,9 +249,8 @@ fun TrustedIssuersScreen(
                     modifier = Modifier.padding(vertical = 16.dp),
                     text = """
 Identity issuers are identified using IACA certificates (Issuing Authority Certificate Authority) which may be 
-distributed in lists from a trusted provider, called a VICAL (Verified Issuer Certificate Authority List).
-                    """.trimIndent().trim(),
-                    style = MaterialTheme.typography.bodyMedium,
+distributed in lists from a trusted provider, called a VICAL (Verified Issuer Certificate Authority List)
+                    """.trimIndent().replace("\n", " ").trim(),
                 )
 
                 Text(
@@ -287,7 +286,7 @@ distributed in lists from a trusted provider, called a VICAL (Verified Issuer Ce
                     TrustEntryList(
                         trustManagerId = TRUST_MANAGER_ID_USER,
                         trustEntries = userTrustEntries,
-                        noTrustPointsText = "Certificates and VICALs manually imported will appear in this list",
+                        noTrustPointsText = "IACA certificates and VICALs manually imported will appear in this list",
                         onTrustEntryClicked = onTrustEntryClicked
                     )
                 }

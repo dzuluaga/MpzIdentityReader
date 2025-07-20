@@ -19,7 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun KvPairList(
+fun EntryList(
     modifier: Modifier = Modifier,
     title: String?,
     entries: List<@Composable () -> Unit>,

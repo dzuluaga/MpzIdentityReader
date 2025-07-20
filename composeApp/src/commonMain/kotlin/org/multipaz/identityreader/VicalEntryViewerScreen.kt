@@ -99,9 +99,9 @@ fun VicalEntryViewerScreen(
 
                     val entries = mutableListOf<@Composable () -> Unit>()
                     entries.add {
-                        KvPairDisplay("Document types", ci.docTypes.joinToString("\n"))
+                        EntryItem("Document types", ci.docTypes.joinToString("\n"))
                     }
-                    KvPairList(
+                    EntryList(
                         title = "VICAL entry",
                         entries = entries
                     )

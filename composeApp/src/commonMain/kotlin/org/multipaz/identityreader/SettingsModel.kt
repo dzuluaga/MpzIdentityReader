@@ -8,11 +8,14 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.cbor.Cbor
+import org.multipaz.cbor.Simple
 import org.multipaz.cbor.Tstr
 import org.multipaz.cbor.buildCborArray
 import org.multipaz.cbor.toDataItem
 import org.multipaz.cbor.toDataItemDateTimeString
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
+import org.multipaz.crypto.X509CertChain
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTable
 import org.multipaz.storage.StorageTableSpec
@@ -71,6 +74,21 @@ class SettingsModel private constructor(
                 String::class -> { dataItem.asTstr as T }
                 List::class -> { dataItem.asArray.map { item -> (item as Tstr).value } as T }
                 EcCurve::class -> { EcCurve.entries.find { it.name == dataItem.asTstr } as T }
+                ReaderAuthMethod::class -> { ReaderAuthMethod.entries.find { it.name == dataItem.asTstr } as T }
+                EcPrivateKey::class -> {
+                    if (dataItem == Simple.NULL) {
+                        null
+                    } else {
+                        EcPrivateKey.fromDataItem(dataItem) as T
+                    }
+                }
+                X509CertChain::class -> {
+                    if (dataItem == Simple.NULL) {
+                        null
+                    } else {
+                        X509CertChain.fromDataItem(dataItem) as T
+                    }
+                }
                 else -> { throw IllegalStateException("Type not supported") }
             }
         } ?: defaultValue
@@ -80,35 +98,24 @@ class SettingsModel private constructor(
             CoroutineScope(Dispatchers.Default).launch {
                 variable.asStateFlow().collect { newValue ->
                     val dataItem = when (T::class) {
-                        Instant::class -> {
-                            (newValue as Instant).toDataItemDateTimeString()
-                        }
-
-                        Long::class -> {
-                            (newValue as Long).toDataItem()
-                        }
-
-                        Boolean::class -> {
-                            (newValue as Boolean).toDataItem()
-                        }
-
-                        String::class -> {
-                            (newValue as String).toDataItem()
-                        }
-
+                        Instant::class -> { (newValue as Instant).toDataItemDateTimeString() }
+                        Long::class -> { (newValue as Long).toDataItem() }
+                        Boolean::class -> { (newValue as Boolean).toDataItem() }
+                        String::class -> { (newValue as String).toDataItem() }
                         List::class -> {
                             buildCborArray {
                                 (newValue as List<*>).forEach { add(Tstr(it as String)) }
                             }
                         }
-
-                        EcCurve::class -> {
-                            (newValue as EcCurve).name.toDataItem()
+                        EcCurve::class -> { (newValue as EcCurve).name.toDataItem() }
+                        ReaderAuthMethod::class -> { (newValue as ReaderAuthMethod).name.toDataItem() }
+                        EcPrivateKey::class -> {
+                            newValue?.let { (newValue as EcPrivateKey).toDataItem() } ?: Simple.NULL
                         }
-
-                        else -> {
-                            throw IllegalStateException("Type not supported")
+                        X509CertChain::class -> {
+                            newValue?.let { (newValue as X509CertChain).toDataItem() } ?: Simple.NULL
                         }
+                        else -> { throw IllegalStateException("Type not supported") }
                     }
                     if (settingsTable.get(key) == null) {
                         settingsTable.insert(key, ByteString(Cbor.encode(dataItem)))
@@ -133,10 +140,22 @@ class SettingsModel private constructor(
         bind(selectedQueryName, "selectedQueryName", ReaderQuery.AGE_OVER_21.name)
         bind(builtInIssuersUpdatedAt, "builtInIssuersUpdatedAt", Instant.DISTANT_PAST)
         bind(builtInIssuersVersion, "builtInIssuersVersion", Long.MIN_VALUE)
+        bind(readerAuthMethod, "readerAuthMethod", ReaderAuthMethod.STANDARD_READER_AUTH)
+        bind(customReaderAuthKey, "customReaderAuthKey", null)
+        bind(customReaderAuthCertChain, "customReaderAuthCertChain", null)
     }
 
     val logTransactions = MutableStateFlow<Boolean>(false)
     val selectedQueryName = MutableStateFlow<String>(ReaderQuery.AGE_OVER_21.name)
     val builtInIssuersUpdatedAt = MutableStateFlow<Instant>(Instant.DISTANT_PAST)
     val builtInIssuersVersion = MutableStateFlow<Long>(Long.MIN_VALUE)
+    val readerAuthMethod = MutableStateFlow<ReaderAuthMethod>(ReaderAuthMethod.STANDARD_READER_AUTH)
+    val customReaderAuthKey = MutableStateFlow<EcPrivateKey?>(null)
+    val customReaderAuthCertChain = MutableStateFlow<X509CertChain?>(null)
+}
+
+enum class ReaderAuthMethod {
+    NO_READER_AUTH,
+    STANDARD_READER_AUTH,
+    CUSTOM_KEY
 }

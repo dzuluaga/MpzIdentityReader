@@ -215,7 +215,7 @@ fun TrustEntryViewerScreen(
                     ) {
                         val entries = mutableListOf<@Composable () -> Unit>()
                         entries.add {
-                            KvPairDisplay("Test only",
+                            EntryItem("Test only",
                                 if (trustEntry.metadata.testOnly) {
                                     "Yes"
                                 } else {
@@ -223,7 +223,7 @@ fun TrustEntryViewerScreen(
                                 }
                             )
                         }
-                        KvPairList(
+                        EntryList(
                             title = null,
                             entries = entries
                         )
@@ -266,28 +266,28 @@ private fun VicalDetails(
 
     val entries = mutableListOf<@Composable () -> Unit>()
     entries.add {
-        KvPairDisplay("Version", signedVical.vical.version)
+        EntryItem("Version", signedVical.vical.version)
     }
     entries.add {
-        KvPairDisplay("Provider", signedVical.vical.vicalProvider)
+        EntryItem("Provider", signedVical.vical.vicalProvider)
     }
     entries.add {
-        KvPairDisplay("Issue", signedVical.vical.vicalIssueID.toString())
+        EntryItem("Issue", signedVical.vical.vicalIssueID.toString())
     }
     entries.add {
-        KvPairDisplay("Issued at", formattedDateTime(signedVical.vical.date))
+        EntryItem("Issued at", formattedDateTime(signedVical.vical.date))
     }
     entries.add {
-        KvPairDisplay("Next update", signedVical.vical.nextUpdate?.let {
+        EntryItem("Next update", signedVical.vical.nextUpdate?.let {
             formattedDateTime(it)
         } ?: AnnotatedString("-"))
     }
-    entries.add { KvPairDisplay("Signer", "Click to view certificate chain",
+    entries.add { EntryItem("Signer", "Click to view certificate chain",
         modifier = Modifier.clickable {
             onShowCertificateChain(signedVical.vicalProviderCertificateChain)
         })
     }
-    KvPairList(
+    EntryList(
         title = "VICAL data",
         entries = entries
     )

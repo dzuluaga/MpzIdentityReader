@@ -27,10 +27,6 @@ data object ShowResultsDestination : Destination {
     override val route = "show_results"
 }
 
-data object TrustedIssuersDestination : Destination {
-    override val route = "trusted_issuers"
-}
-
 data object AboutDestination : Destination {
     override val route = "about"
 }
@@ -82,15 +78,29 @@ data object VicalEntryViewerDestination : Destination {
     )
 }
 
+data object TrustedIssuersDestination : Destination {
+    override val route = "trusted_issuers"
+}
+
+data object SettingsDestination : Destination {
+    override val route = "settings"
+}
+
+data object ReaderIdentityDestination : Destination {
+    override val route = "reader_identity"
+}
+
 val appDestinations = listOf(
     StartDestination,
     ScanQrDestination,
     SelectRequestDestination,
     TransferDestination,
     ShowResultsDestination,
-    TrustedIssuersDestination,
     AboutDestination,
+    SettingsDestination,
+    ReaderIdentityDestination,
+    TrustedIssuersDestination,
     CertificateViewerDestination,
     TrustEntryViewerDestination,
-    TrustEntryEditorDestination
+    TrustEntryEditorDestination,
 )
