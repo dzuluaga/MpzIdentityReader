@@ -169,6 +169,7 @@ private fun StartScreenWithBluetoothPermission(
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        AppUpdateCard()
 
         Spacer(modifier = Modifier.weight(0.1f))
         FlowRow(

@@ -87,6 +87,9 @@ fun ReaderIdentityScreen(
                             require(certChain.validate()) {
                                 "Certificate chain did not validate"
                             }
+                            // TODO: add a couple of additional checks for example that the leaf certificate
+                            //   has the correct keyUsage flags, etc.
+                            //
                             settingsModel.customReaderAuthKey.value = privateKey
                             settingsModel.customReaderAuthCertChain.value = certChain
                             settingsModel.readerAuthMethod.value = ReaderAuthMethod.CUSTOM_KEY
@@ -141,8 +144,8 @@ fun ReaderIdentityScreen(
             ) {
                 Text(
                     text = """
-When making a request for identity attributes a reader identity may optionally be used to sign the
-request. The wallet receiving the request may use this to inform the identity holder who
+When making a request for identity attributes a reader identity may be used to cryptographically
+sign the request. The wallet receiving the request may use this to inform the identity holder who
 the request is from
                     """.trimIndent().replace("\n", " ").trim(),
                 )
@@ -184,8 +187,8 @@ the request is from
                         EntryItem(
                             key = "Standard reader authentication",
                             valueText = textViewCertificateLink(
-                                text = "The Multipaz Identity Reader CA will be used for " +
-                                    "certification of single-use reader keys for anti-tracking",
+                                text = "The Multipaz Identity Reader CA will be used to " +
+                                    "certify single-use reader keys",
                                 showViewCertificate = readerAuthMethod.value == ReaderAuthMethod.STANDARD_READER_AUTH,
                                 onViewCertificateClicked = {
                                     coroutineScope.launch {
@@ -210,7 +213,7 @@ the request is from
                         EntryItem(
                             key = "Use reader certificate from PKCS#12 file",
                             valueText = textViewCertificateLink(
-                                text = "Use a custom key to sign requests. The same key will be " +
+                                text = "Uses a custom key to sign requests. The same key will be " +
                                         "used to sign all requests",
                                 showViewCertificate = readerAuthMethod.value == ReaderAuthMethod.CUSTOM_KEY,
                                 onViewCertificateClicked = {

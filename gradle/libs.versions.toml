@@ -28,6 +28,7 @@ jetbrains-lifecycle = "2.9.1"
 androidx-fragment = "1.8.8"
 compottie = "2.0.0-rc04"
 buildconfig = "5.3.5"
+semver = "3.0.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -74,6 +75,7 @@ jetbrains-navigation-runtime = { module = "org.jetbrains.androidx.navigation:nav
 jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref="jetbrains-lifecycle" }
 androidx-fragment = { module = "androidx.fragment:fragment", version.ref="androidx-fragment" }
 compottie = { module = "io.github.alexzhirkevich:compottie", version.ref="compottie" }
+semver = { module = "io.github.z4kn4fein:semver", version.ref="semver" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -82,6 +82,7 @@ kotlin {
                 implementation(libs.ktor.client.core)
                 implementation(libs.ktor.network)
                 implementation(libs.compottie)
+                implementation(libs.semver)
             }
         }
         commonTest.dependencies {
