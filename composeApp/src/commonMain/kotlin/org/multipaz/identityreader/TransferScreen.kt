@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -26,7 +25,6 @@ import io.github.alexzhirkevich.compottie.rememberLottieComposition
 import io.github.alexzhirkevich.compottie.rememberLottiePainter
 import multipazidentityreader.composeapp.generated.resources.Res
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TransferScreen(
     readerModel: ReaderModel,
@@ -87,7 +85,7 @@ fun TransferScreen(
 
                 Text(
                     text = "Waiting for Presenter",
-                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
             }

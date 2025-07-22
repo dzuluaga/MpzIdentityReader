@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -30,7 +29,6 @@ import org.multipaz.mdoc.vical.VicalCertificateInfo
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustManagerLocal
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun VicalEntryViewerScreen(
     builtInTrustManager: TrustManagerLocal,
@@ -90,7 +88,7 @@ fun VicalEntryViewerScreen(
 
                         Text(
                             text = ci.displayNameWithFallback,
-                            style = MaterialTheme.typography.titleLargeEmphasized,
+                            style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                     }

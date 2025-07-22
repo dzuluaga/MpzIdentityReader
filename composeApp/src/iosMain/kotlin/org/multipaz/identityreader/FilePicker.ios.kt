@@ -1,6 +1,7 @@
 package org.multipaz.identityreader
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import kotlinx.io.bytestring.ByteString
 
 @Composable
@@ -9,7 +10,15 @@ actual fun rememberFilePicker(
     allowMultiple: Boolean,
     onResult: (fileData: List<ByteString>) -> Unit,
 ): FilePicker {
-    TODO()
+    return remember {
+        FilePicker(
+            types = types,
+            allowMultiple = allowMultiple,
+            onLaunch = {
+                TODO()
+            },
+        )
+    }
 }
 
 actual class FilePicker actual constructor(

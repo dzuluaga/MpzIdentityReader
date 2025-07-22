@@ -67,8 +67,6 @@ kotlin {
                 implementation(libs.jetbrains.navigation.compose)
                 implementation(libs.jetbrains.navigation.runtime)
                 implementation(libs.jetbrains.lifecycle.viewmodel.compose)
-                implementation(libs.androidx.lifecycle.viewmodel)
-                implementation(libs.androidx.lifecycle.runtimeCompose)
 
                 implementation(libs.multipaz)
                 implementation(libs.multipaz.models)

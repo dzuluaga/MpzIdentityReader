@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -24,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import org.multipaz.compose.permissions.rememberBluetoothPermissionState
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SelectRequestScreen(
     readerModel: ReaderModel,
@@ -65,7 +63,7 @@ fun SelectRequestScreen(
 
                     Text(
                         text = "Select what to request",
-                        style = MaterialTheme.typography.titleLargeEmphasized,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
 

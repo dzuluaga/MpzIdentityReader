@@ -15,12 +15,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +70,20 @@ fun ShowResultsScreen(
     val documents = remember { mutableStateOf<List<MdocDocument>?>(null) }
     val verificationError = remember { mutableStateOf<Throwable?>(null) }
 
+    LaunchedEffect(Unit) {
+        if (readerModel.error == null) {
+            coroutineScope.launch {
+                val now = Clock.System.now()
+                try {
+                    documents.value =
+                        parseResponse(now, readerModel, documentTypeRepository, issuerTrustManager)
+                } catch (e: Throwable) {
+                    verificationError.value = e
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -87,34 +101,22 @@ fun ShowResultsScreen(
                     secondaryMessage = null,
                 )
             } else {
-                if (documents.value == null) {
-                    coroutineScope.launch {
-                        val now = Clock.System.now()
-                        try {
-                            documents.value =
-                                parseResponse(now, readerModel, documentTypeRepository, issuerTrustManager)
-                        } catch (e: Throwable) {
-                            verificationError.value = e
-                        }
-                    }
-                }
-            }
-
-            if (documents.value == null && verificationError.value == null) {
-                ShowResultsScreenValidating()
-            } else if (verificationError.value != null) {
-                ShowResultsScreenFailed(
-                    message = "Document verification failed",
-                    secondaryMessage = "The returned document is from an unknown issuer",
-                )
-            } else {
-                if (documents.value!!.size == 0) {
+                if (documents.value == null && verificationError.value == null) {
+                    ShowResultsScreenValidating()
+                } else if (verificationError.value != null) {
                     ShowResultsScreenFailed(
-                        message = "No documents returned",
-                        secondaryMessage = null,
+                        message = "Document verification failed",
+                        secondaryMessage = "The returned document is from an unknown issuer",
                     )
                 } else {
-                    ShowResultsScreenSuccess(readerQuery, documents.value!!)
+                    if (documents.value!!.size == 0) {
+                        ShowResultsScreenFailed(
+                            message = "No documents returned",
+                            secondaryMessage = null,
+                        )
+                    } else {
+                        ShowResultsScreenSuccess(readerQuery, documents.value!!)
+                    }
                 }
             }
         }
@@ -207,7 +209,6 @@ private suspend fun parseResponse(
     return readerDocuments
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShowResultsScreenValidating() {
     val coroutineScope = rememberCoroutineScope()
@@ -225,7 +226,7 @@ private fun ShowResultsScreenValidating() {
         ) {
             Text(
                 text = "Validating documents",
-                style = MaterialTheme.typography.titleLargeEmphasized,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
@@ -233,7 +234,6 @@ private fun ShowResultsScreenValidating() {
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShowResultsScreenFailed(
     message: String,
@@ -272,7 +272,7 @@ private fun ShowResultsScreenFailed(
 
             Text(
                 text = message,
-                style = MaterialTheme.typography.titleLargeEmphasized,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
@@ -289,10 +289,6 @@ private fun ShowResultsScreenFailed(
     }
 }
 
-
-
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShowResultsScreenSuccess(
     readerQuery: ReaderQuery,
@@ -365,7 +361,6 @@ private fun ShowResultsScreenSuccess(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShowAgeOver(
     age: Int,
@@ -409,14 +404,13 @@ private fun ShowAgeOver(
         )
         Text(
             text = message,
-            style = MaterialTheme.typography.titleLargeEmphasized,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ShowIdentification(
     document: MdocDocument
@@ -451,7 +445,7 @@ private fun ShowIdentification(
         )
         Text(
             text = "Identity data verified",
-            style = MaterialTheme.typography.titleLargeEmphasized,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center
         )

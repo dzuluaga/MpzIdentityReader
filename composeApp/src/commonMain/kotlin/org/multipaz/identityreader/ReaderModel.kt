@@ -173,7 +173,7 @@ class ReaderModel {
                 Logger.w(TAG, "Error doing reader flow", e)
                 Pair(null, e)
             }
-            println("Setting state to COMPLETED, result=$result error=$error")
+            println("Setting state to COMPLETED")
             _result = result
             _error = error
             deviceEngagement = null

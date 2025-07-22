@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +57,6 @@ import org.multipaz.util.UUID
 
 private const val TAG = "StartScreen"
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun StartScreen(
     settingsModel: SettingsModel,
@@ -104,7 +102,6 @@ fun StartScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun StartScreenWithBluetoothPermission(
     settingsModel: SettingsModel,
@@ -196,7 +193,7 @@ private fun StartScreenWithBluetoothPermission(
             // This is for phones that don't support NFC scanning
             Text(
                 text = "Scan QR code from Wallet",
-                style = MaterialTheme.typography.titleLargeEmphasized,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         } else {
@@ -208,11 +205,21 @@ private fun StartScreenWithBluetoothPermission(
                 contentDescription = null,
                 modifier = Modifier.size(200.dp)
             )
-            Text(
-                text = "Hold to Wallet",
-                style = MaterialTheme.typography.titleLargeEmphasized,
-                fontWeight = FontWeight.Bold
-            )
+            if (nfcTagScanningSupportedWithoutDialog) {
+                // This is for phones that support NFC scanning w/o dialog (Android)
+                Text(
+                    text = "Hold to Wallet",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            } else {
+                // This is for phones that requires a dialog for NFC scanning (iOS)
+                Text(
+                    text = "Scan NFC or QR from Wallet",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(modifier = Modifier.weight(0.5f))
