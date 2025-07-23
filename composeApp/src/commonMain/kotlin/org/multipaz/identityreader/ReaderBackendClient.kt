@@ -63,6 +63,7 @@ internal data class CertifiedKey(
     val validFrom: Instant,
     val validUntil: Instant,
     val refreshAt: Instant,
+    val forReaderIdentity: String?
 ) {
     companion object
 }
@@ -159,19 +160,41 @@ open class ReaderBackendClient(
 
     // Ensures we have at least numKeys/2 fresh keys. Also removes expired keys.
     //
-    private suspend fun ensureReplenished(atTime: Instant = Clock.System.now()) {
-        if (ensureReplenishedWithRetry(atTime)) {
+    private suspend fun ensureReplenished(
+        readerIdentityId: String? = null,
+        atTime: Instant = Clock.System.now()
+    ) {
+        if (ensureReplenishedWithRetry(readerIdentityId, atTime)) {
             // Our registration was 404, so retry
-            ensureReplenishedWithRetry(atTime)
+            ensureReplenishedWithRetry(readerIdentityId, atTime)
         }
     }
 
     // Like ensureReplenished() but returns true if we need to retry
-    private suspend fun ensureReplenishedWithRetry(atTime: Instant = Clock.System.now()): Boolean {
+    private suspend fun ensureReplenishedWithRetry(
+        readerIdentityId: String? = null,
+        atTime: Instant = Clock.System.now()
+    ): Boolean {
         ensureCertifiedKeys()
+
+        val certifiedKeysTable = storage.getTable(certifiedKeysSpec)
+
+        // First, go through and immediately delete all keys that don't match readerIdentityId. We never
+        // want those to linger or stick around in case the server isn't reachable.
+        val keysNotMatchingReaderIdentityId = mutableListOf<Pair<String, CertifiedKey>>()
+        for ((id, certifiedKey) in certifiedKeys!!.entries) {
+            if (certifiedKey.forReaderIdentity != readerIdentityId) {
+                keysNotMatchingReaderIdentityId.add(Pair(id, certifiedKey))
+            }
+        }
+        keysNotMatchingReaderIdentityId.forEach {
+            secureArea.deleteKey(it.second.alias)
+            certifiedKeysTable.delete(it.first)
+            certifiedKeys!!.remove(it.first)
+        }
+
         var numGoodKeys = 0
         val toDelete = mutableListOf<Pair<String, CertifiedKey>>()
-        val certifiedKeysTable = storage.getTable(certifiedKeysSpec)
         for ((id, certifiedKey) in certifiedKeys!!.entries) {
             if (atTime > certifiedKey.refreshAt) {
                 toDelete.add(Pair(id, certifiedKey))
@@ -214,12 +237,20 @@ open class ReaderBackendClient(
             put("registrationId", registrationData.registrationId)
             put("nonce", nonceBase64Url)
             put("deviceAssertion", deviceAssertion.toCbor().toBase64Url())
+            readerIdentityId?.let {
+                put("readerIdentity", it)
+            }
             putJsonArray("keys") {
                 for (keyInfo in keysToCertify) {
                     add(keyInfo.publicKey.toJwk())
                 }
             }
         })
+        if (certifyStatus == HttpStatusCode.Forbidden) {
+            throw ReaderIdentityNotAvailableException(
+                "Server indicated the requested reader identity is not available"
+            )
+        }
         if (certifyStatus == HttpStatusCode.NotFound) {
             // This is for handling the case here the server forgot or deleted our registrationId.
             Logger.w(TAG, "Server returned 404 on certifyKeys. Going to re-register.")
@@ -248,6 +279,7 @@ open class ReaderBackendClient(
                 validFrom = validFrom,
                 validUntil = validUntil,
                 refreshAt = refreshAt,
+                forReaderIdentity = readerIdentityId,
             )
             val id = certifiedKeysTable.insert(
                 key = null,
@@ -276,14 +308,19 @@ open class ReaderBackendClient(
      * network I/O is reduced for future calls. For example, it might be advantageous to do this
      * at application startup.
      *
+     * @param readerIdentityId the reader identity in use or `null` for the default reader identity.
      * @param atTime the current time, to take into consideration for purposing of evicting expired keys.
      * @return a [KeyInfo] for a key in [SecureArea] and the certification from the reader backend.
+     * @throws ReaderIdentityNotAvailableException if the caller does not have access to the given [readerIdentityId].
      */
     suspend fun getKey(
+        readerIdentityId: String? = null,
         atTime: Instant = Clock.System.now()
     ): Pair<KeyInfo, X509CertChain> {
         try {
-            ensureReplenished(atTime)
+            ensureReplenished(readerIdentityId, atTime)
+        } catch (e: ReaderIdentityNotAvailableException) {
+            throw e
         } catch (e: Throwable) {
             Logger.w(TAG, "Ignoring error replenishing keys: $e")
         }
@@ -304,10 +341,12 @@ open class ReaderBackendClient(
      * Marks a key retrieved with [getKey] as used.
      *
      * @param keyInfo the [KeyInfo] returned from the [getKey] call.
+     * @param readerIdentityId the reader identity in use or `null` for the default reader identity.
      * @param atTime the current time, to take into consideration for purposing of evicting expired keys.
      */
     suspend fun markKeyAsUsed(
         keyInfo: KeyInfo,
+        readerIdentityId: String? = null,
         atTime: Instant = Clock.System.now()
     ) {
         ensureCertifiedKeys()
@@ -319,7 +358,7 @@ open class ReaderBackendClient(
         // leave the key around but mark that it's already been used
         if (certifiedKeys!!.size == 1) {
             try {
-                ensureReplenished(atTime)
+                ensureReplenished(readerIdentityId, atTime)
             } catch (e: Throwable) {
                 Logger.w(TAG, "Ignoring error replenishing keys so keeping around last key: $e")
                 return
@@ -371,7 +410,88 @@ open class ReaderBackendClient(
         return Pair(version, entries)
     }
 
+    suspend fun signInGetNonce(): ByteString {
+        val (nonceStatus, nonceRespObj) = communicateWithServer("getNonce", buildJsonObject {})
+        check(nonceStatus == HttpStatusCode.OK)
+        val nonceBase64Url = nonceRespObj.get("nonce")!!.jsonPrimitive.content
+        return ByteString(nonceBase64Url.fromBase64Url())
+    }
+
+    suspend fun signIn(
+        nonce: ByteString,
+        googleIdTokenString: String
+    ) {
+        val nonceBase64Url = nonce.toByteArray().toBase64Url()
+
+        val registrationData = ensureRegistered()
+        val deviceAssertion = DeviceCheck.generateAssertion(
+            secureArea = Platform.getSecureArea(),
+            deviceAttestationId = registrationData.deviceAttestationId,
+            assertion = AssertionNonce(nonce)
+        )
+
+        val (status, obj) = communicateWithServer("signIn", buildJsonObject {
+            put("registrationId", registrationData.registrationId)
+            put("nonce", nonceBase64Url)
+            put("deviceAssertion", deviceAssertion.toCbor().toBase64Url())
+            put("googleIdTokenString", googleIdTokenString)
+        })
+        check(status == HttpStatusCode.OK)
+    }
+
+    suspend fun signOut() {
+        val registrationData = ensureRegistered()
+
+        val (nonceStatus, nonceRespObj) = communicateWithServer("getNonce", buildJsonObject {})
+        check(nonceStatus == HttpStatusCode.OK)
+        val nonceBase64Url = nonceRespObj.get("nonce")!!.jsonPrimitive.content
+        val nonce = nonceBase64Url.fromBase64Url()
+
+        val deviceAssertion = DeviceCheck.generateAssertion(
+            secureArea = Platform.getSecureArea(),
+            deviceAttestationId = registrationData.deviceAttestationId,
+            assertion = AssertionNonce(ByteString(nonce))
+        )
+
+        val (status, obj) = communicateWithServer("signOut", buildJsonObject {
+            put("registrationId", registrationData.registrationId)
+            put("nonce", nonceBase64Url)
+            put("deviceAssertion", deviceAssertion.toCbor().toBase64Url())
+        })
+        check(status == HttpStatusCode.OK)
+    }
+
+    suspend fun getReaderIdentities(): List<ReaderIdentity> {
+        val registrationData = ensureRegistered()
+
+        val (nonceStatus, nonceRespObj) = communicateWithServer("getNonce", buildJsonObject {})
+        check(nonceStatus == HttpStatusCode.OK)
+        val nonceBase64Url = nonceRespObj.get("nonce")!!.jsonPrimitive.content
+        val nonce = nonceBase64Url.fromBase64Url()
+
+        val deviceAssertion = DeviceCheck.generateAssertion(
+            secureArea = Platform.getSecureArea(),
+            deviceAttestationId = registrationData.deviceAttestationId,
+            assertion = AssertionNonce(ByteString(nonce))
+        )
+
+        val (status, obj) = communicateWithServer("getReaderIdentities", buildJsonObject {
+            put("registrationId", registrationData.registrationId)
+            put("nonce", nonceBase64Url)
+            put("deviceAssertion", deviceAssertion.toCbor().toBase64Url())
+        })
+        check(status == HttpStatusCode.OK)
+        return obj["entries"]!!.jsonArray.map { entry ->
+            entry as JsonObject
+            ReaderIdentity(
+                id = entry["id"]!!.jsonPrimitive.content,
+                displayName = entry["displayName"]!!.jsonPrimitive.content,
+                displayIcon = entry["displayIcon"]?.jsonPrimitive?.content?.let { ByteString(it.fromBase64Url()) }
+            )
+        }
+    }
+
     companion object {
-        private const val TAG = "ReaderKeyManager"
+        private const val TAG = "ReaderBackendClient"
     }
 }

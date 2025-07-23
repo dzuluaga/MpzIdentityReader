@@ -29,6 +29,10 @@ androidx-fragment = "1.8.8"
 compottie = "2.0.0-rc04"
 buildconfig = "5.3.5"
 semver = "3.0.0"
+androidx-credentials = "1.5.0"
+play-services-auth = "21.3.0"
+identity-googleid = "1.1.1"
+identity-google-api-client = "2.8.0"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -76,6 +80,10 @@ jetbrains-lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifec
 androidx-fragment = { module = "androidx.fragment:fragment", version.ref="androidx-fragment" }
 compottie = { module = "io.github.alexzhirkevich:compottie", version.ref="compottie" }
 semver = { module = "io.github.z4kn4fein:semver", version.ref="semver" }
+androidx-credentials = { module = "androidx.credentials:credentials", version.ref="androidx-credentials" }
+play-services-auth = {module = "com.google.android.gms:play-services-auth", version.ref = "play-services-auth" }
+identity-googleid = { module = "com.google.android.libraries.identity.googleid:googleid", version.ref = "identity-googleid" }
+identity-google-api-client = { module = "com.google.api-client:google-api-client", version.ref = "identity-google-api-client" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

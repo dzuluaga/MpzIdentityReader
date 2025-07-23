@@ -22,6 +22,8 @@ import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.identityreader.libbackend.ReaderBackend
+import org.multipaz.identityreader.libbackend.SignedInGoogleUser
+import org.multipaz.identityreader.libbackend.ReaderIdentity as BackendReaderIdentity
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.securearea.AndroidKeystoreSecureArea
 import org.multipaz.securearea.SecureArea
@@ -31,7 +33,9 @@ import org.multipaz.trustmanagement.TrustEntry
 import org.multipaz.trustmanagement.TrustEntryVical
 import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustMetadata
+import org.multipaz.util.toBase64Url
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.fail
@@ -46,7 +50,8 @@ class ReaderBackendTest {
         numKeys: Int,
         androidAppSignatureCertificateDigests: List<ByteString> = emptyList(),
         issueTrustListVersion: Long = Long.MIN_VALUE,
-        issuerTrustList: List<TrustEntry> = emptyList()
+        issuerTrustList: List<TrustEntry> = emptyList(),
+        getReaderIdentitiesForUser: (user: SignedInGoogleUser) -> List<BackendReaderIdentity> = { emptyList() }
     ) : ReaderBackendClient(
         readerBackendUrl = "not-used",
         storage = clientStorage,
@@ -101,6 +106,13 @@ class ReaderBackendTest {
             androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests,
             issuerTrustListVersion = issueTrustListVersion,
             issuerTrustList = issuerTrustList,
+            googleIdTokenVerifier = { idToken ->
+                Pair(idToken, SignedInGoogleUser(
+                    id = "1234567890",
+                    email = "user@example.org"
+                ))
+            },
+            getReaderIdentitiesForUser = getReaderIdentitiesForUser,
             getStorageTable = { spec -> serverStorage_.getTable(spec) },
             getCurrentTime = { currentTime }
         )
@@ -122,6 +134,9 @@ class ReaderBackendTest {
                 "register" -> backend.handleRegister(request)
                 "certifyKeys" -> backend.handleCertifyKeys(request)
                 "getIssuerList" -> backend.handleGetIssuerList(request)
+                "signIn" -> backend.handleSignIn(request)
+                "signOut" -> backend.handleSignOut(request)
+                "getReaderIdentities" -> backend.handleGetReaderIdentities(request)
                 else -> throw IllegalArgumentException("Unexpected method $methodName")
             }
         }
@@ -169,7 +184,7 @@ class ReaderBackendTest {
             numKeys = 10,
             androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
         )
-        val (_, certChain) = client.getKey(client.currentTime)
+        val (_, certChain) = client.getKey(atTime = client.currentTime)
         assertTrue(certChain.validate())
         assertEquals(2, certChain.certificates.size)
 
@@ -191,7 +206,7 @@ class ReaderBackendTest {
 
         // Use up just enough keys to cause an RPC for replenishing on the call following the next call
         repeat(4) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
         }
         assertEquals(4, client.numRpc)
@@ -205,11 +220,11 @@ class ReaderBackendTest {
             numKeys = 10,
             androidAppSignatureCertificateDigests = androidAppSignatureCertificateDigests
         )
-        val (keyInfo, _) = client2.getKey(client2.currentTime)
+        val (keyInfo, _) = client2.getKey(atTime = client2.currentTime)
         client2.markKeyAsUsed(keyInfo)
         assertEquals(0, client2.numRpc)
         // Next getKey() call will cause RPCs.. check we only do two RPCs for replenishing
-        val (_, _) = client2.getKey(client2.currentTime)
+        val (_, _) = client2.getKey(atTime = client2.currentTime)
         assertEquals(2, client2.numRpc)
     }
 
@@ -225,19 +240,19 @@ class ReaderBackendTest {
         )
 
         // First call should cause the usual 4 RPCs
-        val (_, _) = client.getKey(client.currentTime)
+        val (_, _) = client.getKey(atTime = client.currentTime)
         assertEquals(4, client.numRpc)
 
         // Unless we use the key, it won't get replenished, so check getKey() can be called 100 times
         // without causing any additional RPCs.
-        repeat(100) { client.getKey(client.currentTime) }
+        repeat(100) { client.getKey(atTime = client.currentTime) }
         assertEquals(4, client.numRpc)
 
         // Now use up 5 keys, and make sure we saw different keys everytime. Because we only
         // replenish when we fall below 50% this means no additional RPC is done. Check this.
         val seenAliases = mutableSetOf<String>()
         repeat(5) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
             seenAliases.add(keyInfo.alias)
         }
@@ -245,14 +260,14 @@ class ReaderBackendTest {
         assertEquals(4, client.numRpc)
 
         // Next time we'll use a key it'll cause RPC to replenish, two calls. Check this.
-        val (keyInfo, _) = client.getKey(client.currentTime)
+        val (keyInfo, _) = client.getKey(atTime = client.currentTime)
         client.markKeyAsUsed(keyInfo)
         assertEquals(6, client.numRpc)
 
         // Check replenishing works ad infinitum (example: 100 uses) and we only do RPCs once half empty.
         seenAliases.clear()
         repeat(100) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
             seenAliases.add(keyInfo.alias)
         }
@@ -272,18 +287,18 @@ class ReaderBackendTest {
         )
 
         // First call should cause the usual 4 RPCs
-        val (_, _) = client.getKey(client.currentTime)
+        val (_, _) = client.getKey(atTime = client.currentTime)
         assertEquals(4, client.numRpc)
 
         // Advance the time to 15 days past, should not cause RPC.
         client.currentTime += 15.days
-        val (_, _) = client.getKey(client.currentTime)
+        val (_, _) = client.getKey(atTime = client.currentTime)
         assertEquals(4, client.numRpc)
 
         // Another another 6 days to bring us to 21 days. This will cause 2 RPCs since all keys will be
         // replaced after two thirds of 30 days which is 20 days.
         client.currentTime += 6.days
-        val (_, certChain) = client.getKey(client.currentTime)
+        val (_, certChain) = client.getKey(atTime = client.currentTime)
         assertEquals(6, client.numRpc)
         assertTrue(certChain.validate())
         assertEquals(2, certChain.certificates.size)
@@ -309,14 +324,14 @@ class ReaderBackendTest {
         )
 
         // First call should cause the usual 4 RPCs
-        val (_, _) = client.getKey(client.currentTime)
+        val (_, _) = client.getKey(atTime = client.currentTime)
         assertEquals(4, client.numRpc)
 
         // Now simulate not having Internet connectivity and use up all keys. This should work.
         client.disableServer = true
         val seenAliases = mutableSetOf<String>()
         repeat(10) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
             seenAliases.add(keyInfo.alias)
         }
@@ -329,7 +344,7 @@ class ReaderBackendTest {
         // This means that if we get another key it'll be the one we just used. Consequently
         // `seenAliases` set will not grow. Check this.
         repeat(10) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
             seenAliases.add(keyInfo.alias)
         }
@@ -339,7 +354,7 @@ class ReaderBackendTest {
         // will stop working, though.
         client.currentTime += 31.days
         try {
-            client.getKey(client.currentTime)
+            client.getKey(atTime = client.currentTime)
             fail("Expected getKey() to fail")
         } catch (_: IllegalStateException) {
             // expected path
@@ -348,7 +363,7 @@ class ReaderBackendTest {
         // If we turn Internet connectivity back on, we'll get fresh never-used keys.
         client.disableServer = false
         repeat(10) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
             seenAliases.add(keyInfo.alias)
         }
@@ -365,7 +380,7 @@ class ReaderBackendTest {
             secureArea = AndroidKeystoreSecureArea.create(clientStorage),
             numKeys = 10
         )
-        val (_, certChain) = client.getKey(client.currentTime)
+        val (_, certChain) = client.getKey(atTime = client.currentTime)
         assertTrue(certChain.validate())
         assertEquals(2, certChain.certificates.size)
         assertEquals(client.readerRootCertChain.certificates[0], certChain.certificates[1])
@@ -375,7 +390,7 @@ class ReaderBackendTest {
 
         // Use up just enough keys to cause an RPC for replenishing on the next call
         repeat(5) {
-            val (keyInfo, _) = client.getKey(client.currentTime)
+            val (keyInfo, _) = client.getKey(atTime = client.currentTime)
             client.markKeyAsUsed(keyInfo)
         }
         assertEquals(4, client.numRpc)
@@ -385,7 +400,7 @@ class ReaderBackendTest {
         // - two for the failing replenishing (getNonce -> 200, certifyKeys -> 404)
         // - four for registering again
         client.setServerStorage(EphemeralStorage())
-        val (_, _) = client.getKey(client.currentTime)
+        val (_, _) = client.getKey(atTime = client.currentTime)
         assertEquals(10, client.numRpc)
     }
 
@@ -423,10 +438,217 @@ class ReaderBackendTest {
         assertEquals(issuerListsFromServer, client.getTrustedIssuers(currentVersion = 43L))
         assertEquals(issuerListsFromServer, client.getTrustedIssuers(currentVersion = null))
 
-        val (_, certChain) = client.getKey(client.currentTime)
+        val (_, certChain) = client.getKey(atTime = client.currentTime)
         assertTrue(certChain.validate())
         assertEquals(2, certChain.certificates.size)
         assertEquals(client.readerRootCertChain.certificates[0], certChain.certificates[1])
+    }
 
+    @Test
+    fun testSignIn() = runTest {
+        val clientStorage = EphemeralStorage()
+        val serverStorage = EphemeralStorage()
+        val client = LoopbackReaderBackendClient(
+            clientStorage = clientStorage,
+            serverStorage = serverStorage,
+            secureArea = AndroidKeystoreSecureArea.create(clientStorage),
+            numKeys = 10,
+        )
+
+        // Starting state is that we're signed out.
+        assertFailsWith(IllegalStateException::class) {
+            client.signOut()
+        }.message.let {
+            assertEquals("User isn't signed in", it)
+        }
+
+        // Happy path, we can sign in.
+        val nonce = client.signInGetNonce()
+        client.signIn(
+            nonce = nonce,
+            // Test verifier expects the ID token to be set to the nonce as base64url
+            googleIdTokenString = nonce.toByteArray().toBase64Url()
+        )
+
+        // Should fail b/c we're already signed in
+        assertFailsWith(IllegalStateException::class) {
+            val nonce = client.signInGetNonce()
+            client.signIn(
+                nonce = nonce,
+                // Test verifier expects the ID token to be set to the nonce as base64url
+                googleIdTokenString = nonce.toByteArray().toBase64Url()
+            )
+        }.message.let {
+            assertEquals("User is already signed in", it)
+        }
+
+        // Now signing out should not fail
+        client.signOut()
+
+        // Should fail b/c we're already signed out
+        assertFailsWith(IllegalStateException::class) {
+            client.signOut()
+        }.message.let {
+            assertEquals("User isn't signed in", it)
+        }
+    }
+
+    @Test
+    fun testReaderIdentities() = runTest {
+        val clientStorage = EphemeralStorage()
+        val serverStorage = EphemeralStorage()
+
+        val fooPrivateKey = Crypto.createEcPrivateKey(curve = EcCurve.P384)
+        val fooCertChain = X509CertChain(certificates = listOf(MdocUtil.generateReaderRootCertificate(
+            readerRootKey = fooPrivateKey,
+            subject = X500Name.fromName("CN=Foo Reader CA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = Instant.parse("2024-07-01T06:00:00Z"),
+            validUntil = Instant.parse("2030-07-01T06:00:00Z"),
+            crlUrl = "https://www.example.com/crl"
+        )))
+
+        val barPrivateKey = Crypto.createEcPrivateKey(curve = EcCurve.P384)
+        val barCertChain = X509CertChain(certificates = listOf(MdocUtil.generateReaderRootCertificate(
+            readerRootKey = barPrivateKey,
+            subject = X500Name.fromName("CN=Bar Reader CA"),
+            serial = ASN1Integer.fromRandom(numBits = 128),
+            validFrom = Instant.parse("2024-07-01T06:00:00Z"),
+            validUntil = Instant.parse("2030-07-01T06:00:00Z"),
+            crlUrl = "https://www.example.com/crl"
+        )))
+
+        val client = LoopbackReaderBackendClient(
+            clientStorage = clientStorage,
+            serverStorage = serverStorage,
+            secureArea = AndroidKeystoreSecureArea.create(clientStorage),
+            numKeys = 10,
+            getReaderIdentitiesForUser = { user ->
+                listOf(
+                    BackendReaderIdentity(
+                        id = "foo",
+                        displayName = "Foo id=${user.id} email=${user.email}",
+                        displayIcon = ByteString(1, 2, 3),
+                        privateKey = fooPrivateKey,
+                        certChain = fooCertChain
+                    ),
+                    BackendReaderIdentity(
+                        id = "bar",
+                        displayName = "Bar id=${user.id} email=${user.email}",
+                        displayIcon = ByteString(4, 5, 6),
+                        privateKey = barPrivateKey,
+                        certChain = barCertChain
+                    )
+                )
+            }
+        )
+
+        // Should fail b/c we're not yet signed in
+        assertFailsWith(IllegalStateException::class) {
+            client.getReaderIdentities()
+        }.message.let {
+            assertEquals("User isn't signed in", it)
+        }
+
+        // First call should be four RPCs (getNonce, register, getNonce, getReaderIdentities)
+        assertEquals(4, client.numRpc)
+
+        // This should be two RPCs (getNonce, certifyKeys)
+        client.getKey(atTime = client.currentTime).first.let { client.markKeyAsUsed(it)}
+        assertEquals(6, client.numRpc)
+
+        // This should be zero RPCs because we still have cached keys
+        client.getKey(atTime = client.currentTime).first.let { client.markKeyAsUsed(it)}
+        assertEquals(6, client.numRpc)
+
+        // Asking for a specific reader identity should fail b/c we're not signed in.. but should
+        // cause two RPCs (getNonce, certifyKeys)
+        assertFailsWith(ReaderIdentityNotAvailableException::class) {
+            client.getKey(readerIdentityId = "foo", atTime = client.currentTime)
+        }
+        assertEquals(8, client.numRpc)
+
+        // Asking for the generic key should keep working but will cause RPCs since the previous
+        // call blew the cache
+        client.getKey(atTime = client.currentTime).first.let { client.markKeyAsUsed(it)}
+        assertEquals(10, client.numRpc)
+
+        val nonce = client.signInGetNonce()
+        assertEquals(11, client.numRpc)
+        client.signIn(
+            nonce = nonce,
+            // Test verifier expects the ID token to be set to the nonce as base64url
+            googleIdTokenString = nonce.toByteArray().toBase64Url()
+        )
+        assertEquals(12, client.numRpc)
+        val identities = client.getReaderIdentities()
+        assertEquals(14, client.numRpc)
+
+        assertEquals(2, identities.size)
+        assertEquals(ReaderIdentity(
+            id = "foo",
+            displayName = "Foo id=1234567890 email=user@example.org",
+            displayIcon = ByteString(1, 2, 3)
+        ), identities[0])
+        assertEquals(ReaderIdentity(
+            id = "bar",
+            displayName = "Bar id=1234567890 email=user@example.org",
+            displayIcon = ByteString(4, 5, 6)
+        ), identities[1])
+
+        // Now try to select a "foo" reader identity key
+        client.getKey(readerIdentityId = "foo", atTime = client.currentTime).let {
+            assertEquals(fooCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(16, client.numRpc)
+
+        // One more time with "foo", this shouldn't cause RPCs b/c we're hitting the cache
+        client.getKey(readerIdentityId = "foo", atTime = client.currentTime).let {
+            assertEquals(fooCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(16, client.numRpc)
+
+        // Now try to select a "bar" reader identity key. This causes RPCs because
+        // we're evicting all the "foo" keys from the cache and we're left with nothing.
+        client.getKey(readerIdentityId = "bar", atTime = client.currentTime).let {
+            assertEquals(barCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(18, client.numRpc)
+
+        // One more time with "bar", this shouldn't cause RPCs b/c we're hitting the cache
+        client.getKey(readerIdentityId = "bar", atTime = client.currentTime).let {
+            assertEquals(barCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(18, client.numRpc)
+
+        // Back to the generic key, again we're clearing the cache so this causes RPCs
+        client.getKey(readerIdentityId = null, atTime = client.currentTime).let {
+            assertEquals(client.readerRootCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(20, client.numRpc)
+
+        // Selecting a non-existing reader identity triggers an error that the client can
+        // catch and deal with so they can inform the user this identity is no longer available
+        // and update their configuration to just select the generic key.
+        //
+        // This is important to gracefully deal with the situation that the Google account no
+        // longer has access to a reader identity.
+        //
+        assertFailsWith(ReaderIdentityNotAvailableException::class) {
+            client.getKey(readerIdentityId = "non-existent-id", atTime = client.currentTime)
+        }
+        assertEquals(22, client.numRpc)
+
+        // Back to the generic key.. we cleared the cache above trying for non-existent-id so this causes RPCs
+        client.getKey(readerIdentityId = null, atTime = client.currentTime).let {
+            assertEquals(client.readerRootCertChain.certificates[0], it.second.certificates[1])
+            client.markKeyAsUsed(it.first)
+        }
+        assertEquals(24, client.numRpc)
     }
 }

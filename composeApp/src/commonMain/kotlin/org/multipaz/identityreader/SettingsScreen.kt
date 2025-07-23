@@ -50,7 +50,6 @@ fun SettingsScreen(
                     .padding(16.dp),
             ) {
                 val entries = mutableListOf<@Composable () -> Unit>()
-
                 entries.add {
                     Row(
                         modifier = Modifier.clickable { onReaderIdentityPressed() },

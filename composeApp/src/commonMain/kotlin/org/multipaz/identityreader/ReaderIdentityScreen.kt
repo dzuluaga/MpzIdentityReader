@@ -1,26 +1,46 @@
 package org.multipaz.identityreader
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
+import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -34,11 +54,16 @@ import kotlinx.coroutines.launch
 import multipazidentityreader.composeapp.generated.resources.Res
 import multipazidentityreader.composeapp.generated.resources.reader_identity_title
 import org.jetbrains.compose.resources.stringResource
+import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.X509CertChain
 import org.multipaz.prompt.PromptModel
 import org.multipaz.prompt.requestPassphrase
 import org.multipaz.securearea.PassphraseConstraints
+import org.multipaz.util.Logger
 
+private const val TAG = "ReaderIdentityScreen"
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReaderIdentityScreen(
     promptModel: PromptModel,
@@ -49,6 +74,8 @@ fun ReaderIdentityScreen(
 ) {
     val coroutineScope = rememberCoroutineScope { promptModel }
     val showImportErrorDialog = remember { mutableStateOf<String?>(null) }
+    val signedIntoGoogle = settingsModel.signedIn.collectAsState()
+    val availableReaderIdentities = mutableStateOf<List<ReaderIdentity>?>(null)
 
     val importReaderKeyFilePicker = rememberFilePicker(
         types = listOf(
@@ -136,6 +163,7 @@ fun ReaderIdentityScreen(
             color = MaterialTheme.colorScheme.background
         ) {
             val readerAuthMethod = settingsModel.readerAuthMethod.collectAsState()
+            val readerAuthMethodGoogleId = settingsModel.readerAuthMethodGoogleIdentity.collectAsState()
             Column(
                 modifier = Modifier
                     .verticalScroll(scrollState)
@@ -153,106 +181,197 @@ the request is from
                 val entries = mutableListOf<@Composable () -> Unit>()
                 entries.add {
                     Row(
+                        modifier = Modifier.clickable {
+                            settingsModel.readerAuthMethod.value = ReaderAuthMethod.NO_READER_AUTH
+                            settingsModel.customReaderAuthKey.value = null
+                            settingsModel.customReaderAuthCertChain.value = null
+                        },
                         horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = readerAuthMethod.value == ReaderAuthMethod.NO_READER_AUTH,
-                            onClick = {
-                                settingsModel.readerAuthMethod.value = ReaderAuthMethod.NO_READER_AUTH
-                                settingsModel.customReaderAuthKey.value = null
-                                settingsModel.customReaderAuthCertChain.value = null
-                            }
+                        Icon(
+                            modifier = Modifier.size(32.dp),
+                            imageVector = Icons.Outlined.Block,
+                            contentDescription = null
                         )
                         EntryItem(
+                            modifier = Modifier.weight(1.0f),
                             key = "Don't use reader authentication",
                             valueText = "The request won't be signed and the receiving wallet " +
                                     "won't know who's asking"
                         )
-                    }
-                }
-                entries.add {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = readerAuthMethod.value == ReaderAuthMethod.STANDARD_READER_AUTH,
-                            onClick = {
-                                settingsModel.readerAuthMethod.value = ReaderAuthMethod.STANDARD_READER_AUTH
-                                settingsModel.customReaderAuthKey.value = null
-                                settingsModel.customReaderAuthCertChain.value = null
-                            }
-                        )
-                        EntryItem(
-                            key = "Standard reader authentication",
-                            valueText = textViewCertificateLink(
-                                text = "The Multipaz Identity Reader CA will be used to " +
-                                    "certify single-use reader keys",
-                                showViewCertificate = readerAuthMethod.value == ReaderAuthMethod.STANDARD_READER_AUTH,
-                                onViewCertificateClicked = {
-                                    coroutineScope.launch {
-                                        onShowCertificateChain(readerBackendClient.getKey().second)
-                                    }
-                                },
-                            )
+                        Checkbox(
+                            checked = readerAuthMethod.value == ReaderAuthMethod.NO_READER_AUTH,
+                            onCheckedChange = null
                         )
                     }
                 }
                 entries.add {
                     Row(
+                        modifier = Modifier.clickable {
+                            importReaderKeyFilePicker.launch()
+                        },
                         horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RadioButton(
-                            selected = readerAuthMethod.value == ReaderAuthMethod.CUSTOM_KEY,
-                            onClick = {
-                                importReaderKeyFilePicker.launch()
-                            }
+                        Icon(
+                            modifier = Modifier.size(32.dp),
+                            imageVector = Icons.Outlined.Badge,
+                            contentDescription = null
                         )
                         EntryItem(
+                            modifier = Modifier.weight(1.0f),
                             key = "Use reader certificate from PKCS#12 file",
-                            valueText = textViewCertificateLink(
-                                text = "Uses a custom key to sign requests. The same key will be " +
+                            valueText = "Uses a custom key to sign requests. The same key will be " +
                                         "used to sign all requests",
-                                showViewCertificate = readerAuthMethod.value == ReaderAuthMethod.CUSTOM_KEY,
-                                onViewCertificateClicked = {
-                                    onShowCertificateChain(settingsModel.customReaderAuthCertChain.value!!)
-                                },
-                            )
+                        )
+                        Checkbox(
+                            checked = readerAuthMethod.value == ReaderAuthMethod.CUSTOM_KEY,
+                            onCheckedChange = null
                         )
                     }
                 }
+                entries.add {
+                    Row(
+                        modifier = Modifier.clickable {
+                            settingsModel.readerAuthMethod.value = ReaderAuthMethod.STANDARD_READER_AUTH
+                            settingsModel.customReaderAuthKey.value = null
+                            settingsModel.customReaderAuthCertChain.value = null
+                            // Prime the cache
+                            coroutineScope.launch {
+                                try {
+                                    readerBackendClient.getKey()
+                                } catch (e: Throwable) {
+                                    Logger.w(TAG, "Error priming cache for standard reader auth", e)
+                                }
+                            }
+                        },
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            modifier = Modifier.size(32.dp),
+                            imageVector = Icons.Outlined.Key,
+                            contentDescription = null
+                        )
+                        EntryItem(
+                            modifier = Modifier.weight(1.0f),
+                            key = "Standard reader authentication",
+                            valueText = "The Multipaz Identity Reader CA will be used to " +
+                                    "certify single-use reader keys",
+                        )
+                        Checkbox(
+                            checked = readerAuthMethod.value == ReaderAuthMethod.STANDARD_READER_AUTH,
+                            onCheckedChange = null
+                        )
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (settingsModel.signedIn.value != null) {
+                        coroutineScope.launch {
+                            try {
+                                availableReaderIdentities.value = readerBackendClient.getReaderIdentities()
+                                println("num Reader Identities = ${availableReaderIdentities.value?.size}")
+                                availableReaderIdentities.value?.forEach {
+                                    println(it)
+                                }
+                            } catch (e: Throwable) {
+                                Logger.i(TAG, "Error loading identities", e)
+                                availableReaderIdentities.value = emptyList()
+                            }
+                        }
+                    }
+                }
+
+                availableReaderIdentities.value?.forEach { readerIdentityFromGoogleAccount ->
+                    entries.add {
+                        Row(
+                            modifier = Modifier.clickable {
+                                settingsModel.readerAuthMethod.value = ReaderAuthMethod.GOOGLE_ACCOUNT
+                                settingsModel.readerAuthMethodGoogleIdentity.value = readerIdentityFromGoogleAccount
+                                // Prime the cache
+                                coroutineScope.launch {
+                                    try {
+                                        readerBackendClient.getKey(
+                                            readerIdentityId = settingsModel.readerAuthMethodGoogleIdentity.value!!.id)
+                                    } catch (e: Throwable) {
+                                        Logger.w(TAG, "Error priming cache for Google Account reader auth", e)
+                                    }
+                                }
+                            },
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            readerIdentityFromGoogleAccount.Icon()
+                            EntryItem(
+                                modifier = Modifier.weight(1.0f),
+                                key = readerIdentityFromGoogleAccount.displayName,
+                                valueText = "Reader identity from your Google account",
+                            )
+                            Checkbox(
+                                checked = (
+                                        readerAuthMethod.value == ReaderAuthMethod.GOOGLE_ACCOUNT &&
+                                        readerAuthMethodGoogleId.value == readerIdentityFromGoogleAccount
+                                ),
+                                onCheckedChange = null
+                            )
+                        }
+                    }
+                }
+
                 EntryList(
                     title = "Reader identity",
                     entries = entries
                 )
-            }
-        }
-    }
-}
 
-private fun textViewCertificateLink(
-    text: String,
-    showViewCertificate: Boolean,
-    onViewCertificateClicked: () -> Unit
-) = buildAnnotatedString {
-    append(text)
-    if (showViewCertificate) {
-        append(". ")
-        withLink(
-            LinkAnnotation.Clickable(
-                tag = "cert",
-                linkInteractionListener = { link -> onViewCertificateClicked() }
-            )
-        ) {
-            withStyle(
-                style = SpanStyle(
-                    color = Color.Blue,
-                    textDecoration = TextDecoration.Underline
-                )
-            ) {
-                append("View certificate")
+                if (readerAuthMethod.value != ReaderAuthMethod.NO_READER_AUTH) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        style = MaterialTheme.typography.bodyMedium,
+                        text = buildAnnotatedString {
+                            withLink(
+                                LinkAnnotation.Clickable(
+                                    tag = "cert",
+                                    linkInteractionListener = { link ->
+                                        when (readerAuthMethod.value) {
+                                            ReaderAuthMethod.NO_READER_AUTH -> {}
+                                            ReaderAuthMethod.CUSTOM_KEY -> {
+                                                onShowCertificateChain(settingsModel.customReaderAuthCertChain.value!!)
+                                            }
+                                            ReaderAuthMethod.GOOGLE_ACCOUNT -> {
+                                                coroutineScope.launch {
+                                                    onShowCertificateChain(
+                                                        readerBackendClient.getKey(
+                                                            readerIdentityId = settingsModel
+                                                                .readerAuthMethodGoogleIdentity.value!!.id
+                                                        ).second
+                                                    )
+                                                }
+                                            }
+                                            ReaderAuthMethod.STANDARD_READER_AUTH -> {
+                                                coroutineScope.launch {
+                                                    onShowCertificateChain(
+                                                        readerBackendClient.getKey().second
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            ) {
+                                withStyle(
+                                    style = SpanStyle(
+                                        color = Color.Blue,
+                                        textDecoration = TextDecoration.Underline
+                                    )
+                                ) {
+                                    append("View certificate chain")
+                                }
+                            }
+                        }
+                    )
+                }
             }
         }
     }

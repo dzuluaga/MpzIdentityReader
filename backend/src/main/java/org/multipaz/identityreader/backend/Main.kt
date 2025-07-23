@@ -4,6 +4,7 @@ import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.callloging.CallLogging
+import org.multipaz.identityreader.BuildConfig
 import org.multipaz.server.ServerConfiguration
 import org.multipaz.server.serverHost
 import org.multipaz.server.serverPort
@@ -18,6 +19,8 @@ import org.multipaz.util.Logger
  */
 class Main {
     companion object {
+        private const val TAG = "Main"
+
         @JvmStatic
         fun main(args: Array<String>) {
             val configuration = ServerConfiguration(args)
@@ -28,6 +31,7 @@ class Main {
                 }
             }
             val host = configuration.serverHost ?: "0.0.0.0"
+            Logger.i(TAG, "Starting version ${BuildConfig.VERSION} host=$host port=${configuration.serverPort}")
             embeddedServer(Netty, port = configuration.serverPort, host = host, module = {
                 install(CallLogging)
                 configureRouting(configuration)

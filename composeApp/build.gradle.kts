@@ -19,8 +19,23 @@ val projectVersionName: String by rootProject.extra
 buildConfig {
     packageName("org.multipaz.identityreader")
     buildConfigField("VERSION", projectVersionName)
-    buildConfigField("IDENTITY_READER_UPDATE_URL", System.getenv("IDENTITY_READER_UPDATE_URL") ?: "")
-    buildConfigField("IDENTITY_READER_UPDATE_WEBSITE_URL", System.getenv("IDENTITY_READER_UPDATE_WEBSITE_URL") ?: "")
+    // Use the deployed backend by default even though sign-in will only work if signed with the
+    // signing key used to sign APKs available on https://apps.multipaz.org
+    buildConfigField("IDENTITY_READER_BACKEND_URL",
+        System.getenv("IDENTITY_READER_BACKEND_URL")
+            ?: "https://verifier.multipaz.org/identityreaderbackend"
+    )
+    // This server-side clientId works with APKs signed with the signing key in devkey.keystore
+    buildConfigField("IDENTITY_READER_BACKEND_CLIENT_ID",
+        System.getenv("IDENTITY_READER_BACKEND_CLIENT_ID")
+            ?: "332546139643-p9h5vs340rbmb5c6edids3euclfm4i41.apps.googleusercontent.com"
+    )
+    buildConfigField("IDENTITY_READER_UPDATE_URL",
+        System.getenv("IDENTITY_READER_UPDATE_URL") ?: ""
+    )
+    buildConfigField("IDENTITY_READER_UPDATE_WEBSITE_URL",
+        System.getenv("IDENTITY_READER_UPDATE_WEBSITE_URL") ?: ""
+    )
     useKotlinOutput { internalVisibility = false }
 }
 
@@ -53,6 +68,10 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.fragment)
             implementation(libs.ktor.client.android)
+
+            implementation(libs.androidx.credentials)
+            implementation(libs.play.services.auth)
+            implementation(libs.identity.googleid)
         }
         val commonMain by getting {
             kotlin.srcDir("build/generated/ksp/metadata/commonMain/kotlin")
@@ -116,10 +135,21 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    signingConfigs {
+        create("devkey") {
+            storeFile = file("devkey.keystore")
+            storePassword = "devkey"
+            keyAlias = "devkey-alias"
+            keyPassword = "devkey"
+        }
+    }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("devkey")
+        }
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("devkey")
         }
     }
     compileOptions {

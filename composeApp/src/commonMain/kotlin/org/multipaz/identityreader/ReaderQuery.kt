@@ -11,6 +11,9 @@ import org.multipaz.crypto.X509CertChain
 import org.multipaz.documenttype.knowntypes.DrivingLicense
 import org.multipaz.mdoc.request.DeviceRequestGenerator
 import org.multipaz.securearea.SecureArea
+import org.multipaz.util.Logger
+
+private const val TAG = "ReaderQuery"
 
 enum class ReaderQuery(
     val icon: ImageVector,
@@ -48,11 +51,29 @@ enum class ReaderQuery(
                     readerKeyCertification = null
                 )
             }
+            ReaderAuthMethod.GOOGLE_ACCOUNT,
             ReaderAuthMethod.STANDARD_READER_AUTH -> {
                 val (keyInfo, keyCertification) = try {
-                    readerBackendClient.getKey()
+                    if (settingsModel.readerAuthMethod.value == ReaderAuthMethod.GOOGLE_ACCOUNT) {
+                        readerBackendClient.getKey(
+                            readerIdentityId = settingsModel.readerAuthMethodGoogleIdentity.value!!.id
+                        )
+                    } else {
+                        readerBackendClient.getKey()
+                    }
+                } catch (e: ReaderIdentityNotAvailableException) {
+                    try {
+                        Logger.w(TAG, "The reader identity we're configured for is no longer working", e)
+                        Logger.i(TAG, "Resetting configuration to standard reader auth")
+                        settingsModel.readerAuthMethod.value = ReaderAuthMethod.STANDARD_READER_AUTH
+                        settingsModel.readerAuthMethodGoogleIdentity.value = null
+                        readerBackendClient.getKey()
+                    } catch (e: Throwable) {
+                        Logger.e(TAG, "Error getting certified reader key, proceeding without reader authentication", e)
+                        Pair(null, null)
+                    }
                 } catch (e: Throwable) {
-                    println("Error getting certified reader key, proceeding without reader authentication: $e")
+                    Logger.e(TAG, "Error getting certified reader key, proceeding without reader authentication", e)
                     Pair(null, null)
                 }
                 generateEncodedDeviceRequest(

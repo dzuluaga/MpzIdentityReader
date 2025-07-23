@@ -1,6 +1,9 @@
 package org.multipaz.identityreader.backend
 
 
+import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.json.gson.GsonFactory
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -23,6 +26,7 @@ import kotlinx.datetime.DateTimePeriod
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
+import kotlinx.io.bytestring.ByteString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -34,10 +38,14 @@ import kotlinx.serialization.json.long
 import org.multipaz.asn1.ASN1Integer
 import org.multipaz.crypto.Crypto
 import org.multipaz.crypto.EcCurve
+import org.multipaz.crypto.EcPrivateKey
 import org.multipaz.crypto.X500Name
 import org.multipaz.crypto.X509Cert
 import org.multipaz.crypto.X509CertChain
+import org.multipaz.identityreader.BuildConfig
 import org.multipaz.identityreader.libbackend.ReaderBackend
+import org.multipaz.identityreader.libbackend.ReaderIdentity
+import org.multipaz.identityreader.libbackend.SignedInGoogleUser
 import org.multipaz.mdoc.util.MdocUtil
 import org.multipaz.rpc.backend.BackendEnvironment
 import org.multipaz.rpc.backend.Configuration
@@ -52,6 +60,7 @@ import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.TrustMetadata
 import org.multipaz.util.Logger
 import org.multipaz.util.fromBase64Url
+
 
 private const val TAG = "ApplicationExt"
 
@@ -101,6 +110,9 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
                     "register" -> server.await().handleRegister(requestObj)
                     "certifyKeys" -> server.await().handleCertifyKeys(requestObj)
                     "getIssuerList" -> server.await().handleGetIssuerList(requestObj)
+                    "signIn" -> server.await().handleSignIn(requestObj)
+                    "signOut" -> server.await().handleSignOut(requestObj)
+                    "getReaderIdentities" -> server.await().handleGetReaderIdentities(requestObj)
                     else -> throw InvalidRequestException("Unknown command: $command")
                 }
                 call.respondText(
@@ -111,6 +123,85 @@ fun Application.configureRouting(configuration: ServerConfiguration) {
             }
         }
     }
+}
+
+private suspend fun googleIdTokenVerifier(
+    googleIdTokenString: String,
+): Pair<String, SignedInGoogleUser> {
+    val transport = GoogleNetHttpTransport.newTrustedTransport()
+    val jsonFactory = GsonFactory.getDefaultInstance()
+    val verifier = GoogleIdTokenVerifier.Builder(
+        transport,
+        jsonFactory
+    )
+        .setAudience(listOf(BuildConfig.IDENTITY_READER_BACKEND_CLIENT_ID))
+        .build()
+
+    val idToken = verifier.verify(googleIdTokenString)
+    if (idToken == null) {
+        throw IllegalStateException("Error validating ID token")
+    }
+    val payload = idToken.payload
+    return Pair(
+        payload.nonce,
+        SignedInGoogleUser(
+            id = payload.subject,
+            email = payload.email,
+        )
+    )
+}
+
+private suspend fun getReaderIdentitiesForUser(
+    user: SignedInGoogleUser
+): List<ReaderIdentity> {
+    val configuration = BackendEnvironment.getInterface(Configuration::class)!!
+
+    val readerIdentitiesValue = configuration.getValue("reader_identities")
+    if (readerIdentitiesValue == null) {
+        return emptyList()
+    }
+    val idToIdentity = try {
+        Json.parseToJsonElement(readerIdentitiesValue).jsonArray.associate {
+            it as JsonObject
+            val id = it["id"]!!.jsonPrimitive.content
+            val privateKey = EcPrivateKey.fromJwk(it["identity"]!!.jsonObject["jwk"]!!.jsonObject)
+            val certChain = X509CertChain.fromX5c(it["identity"]!!.jsonObject["x5c"]!!)
+            Pair(
+                id,
+                ReaderIdentity(
+                    id = id,
+                    displayName = it["display_name"]!!.jsonPrimitive.content,
+                    displayIcon = it["display_icon"]?.jsonPrimitive?.content?.fromBase64Url()?.let {
+                        ByteString(it) },
+                    privateKey = privateKey,
+                    certChain = certChain
+                )
+            )
+        }
+    } catch (e: Throwable) {
+        e.printStackTrace()
+        Logger.e(TAG, "Error parsing reader identity", e)
+        return emptyList()
+    }
+
+    val id = user.email ?: user.id
+    val key = "reader_identities_$id"
+    val valueForUser = configuration.getValue(key)
+    Logger.i(TAG, "Looking up $key")
+    val value = if (valueForUser != null) {
+        valueForUser
+    } else {
+        val valueFallback = configuration.getValue("reader_identities_fallback")
+        if (valueFallback == null) {
+            return emptyList()
+        }
+        valueFallback
+    }
+    val identityIds = Json.parseToJsonElement(value).jsonArray.map {
+        it.jsonPrimitive.content
+    }
+
+    return identityIds.mapNotNull { idToIdentity[it] }
 }
 
 private fun createServer(
@@ -134,6 +225,8 @@ private fun createServer(
             androidGmsAttestation = settings.androidRequireGmsAttestation,
             androidVerifiedBootGreen = settings.androidRequireVerifiedBootGreen,
             androidAppSignatureCertificateDigests = settings.androidRequireAppSignatureCertificateDigests,
+            googleIdTokenVerifier = ::googleIdTokenVerifier,
+            getReaderIdentitiesForUser = ::getReaderIdentitiesForUser,
             issuerTrustListVersion = issuerTrustListVersion,
             issuerTrustList = issuerTrustList,
             getStorageTable = { spec -> BackendEnvironment.getTable(spec) },

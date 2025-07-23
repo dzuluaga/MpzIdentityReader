@@ -26,7 +26,8 @@ fun RequestBluetoothPermission(blePermissionState: PermissionState) {
     ) {
         Text(
             text =
-                "Identity Reader uses Bluetooth Low Energy to communicate with wallets on other devices",
+                "Identity Reader uses Bluetooth Low Energy to communicate with wallets on other devices. " +
+            "It does not work unless the permission is granted",
             textAlign = TextAlign.Center
         )
 
@@ -39,7 +40,7 @@ fun RequestBluetoothPermission(blePermissionState: PermissionState) {
                 }
             }
         ) {
-            Text("Request Bluetooth permission")
+            Text("Request permission")
         }
     }
 }

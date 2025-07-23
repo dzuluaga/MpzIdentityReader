@@ -67,55 +67,53 @@ class SettingsModel private constructor(
     ) {
         val value = settingsTable.get(key)?.let {
             val dataItem = Cbor.decode(it.toByteArray())
-            when (T::class) {
-                Instant::class -> { dataItem.asDateTimeString as T }
-                Long::class -> { dataItem.asNumber as T }
-                Boolean::class -> { dataItem.asBoolean as T }
-                String::class -> { dataItem.asTstr as T }
-                List::class -> { dataItem.asArray.map { item -> (item as Tstr).value } as T }
-                EcCurve::class -> { EcCurve.entries.find { it.name == dataItem.asTstr } as T }
-                ReaderAuthMethod::class -> { ReaderAuthMethod.entries.find { it.name == dataItem.asTstr } as T }
-                EcPrivateKey::class -> {
-                    if (dataItem == Simple.NULL) {
-                        null
-                    } else {
-                        EcPrivateKey.fromDataItem(dataItem) as T
-                    }
+            if (dataItem == Simple.NULL) {
+                null
+            } else {
+                when (T::class) {
+                    Instant::class -> dataItem.asDateTimeString
+                    Long::class -> dataItem.asNumber
+                    Boolean::class -> dataItem.asBoolean
+                    String::class -> dataItem.asTstr
+                    ByteString::class -> ByteString(dataItem.asBstr)
+                    List::class -> dataItem.asArray.map { item -> (item as Tstr).value }
+                    EcCurve::class -> EcCurve.entries.find { it.name == dataItem.asTstr }
+                    ReaderAuthMethod::class -> ReaderAuthMethod.entries.find { it.name == dataItem.asTstr }
+                    EcPrivateKey::class -> EcPrivateKey.fromDataItem(dataItem)
+                    X509CertChain::class -> X509CertChain.fromDataItem(dataItem)
+                    SignInWithGoogleUserData::class -> SignInWithGoogleUserData.fromDataItem(dataItem)
+                    ReaderIdentity::class -> ReaderIdentity.fromDataItem(dataItem)
+                    else -> { throw IllegalStateException("Type not supported") }
                 }
-                X509CertChain::class -> {
-                    if (dataItem == Simple.NULL) {
-                        null
-                    } else {
-                        X509CertChain.fromDataItem(dataItem) as T
-                    }
-                }
-                else -> { throw IllegalStateException("Type not supported") }
             }
         } ?: defaultValue
-        variable.value = value
+        variable.value = value as T
 
         if (!readOnly) {
             CoroutineScope(Dispatchers.Default).launch {
                 variable.asStateFlow().collect { newValue ->
-                    val dataItem = when (T::class) {
-                        Instant::class -> { (newValue as Instant).toDataItemDateTimeString() }
-                        Long::class -> { (newValue as Long).toDataItem() }
-                        Boolean::class -> { (newValue as Boolean).toDataItem() }
-                        String::class -> { (newValue as String).toDataItem() }
-                        List::class -> {
-                            buildCborArray {
-                                (newValue as List<*>).forEach { add(Tstr(it as String)) }
+                    val dataItem = if (newValue == null) {
+                        Simple.NULL
+                    } else {
+                        when (T::class) {
+                            Instant::class -> (newValue as Instant).toDataItemDateTimeString()
+                            Long::class -> (newValue as Long).toDataItem()
+                            Boolean::class -> (newValue as Boolean).toDataItem()
+                            String::class -> (newValue as String).toDataItem()
+                            ByteString::class -> (newValue as ByteString).toByteArray().toDataItem()
+                            List::class -> {
+                                buildCborArray {
+                                    (newValue as List<*>).forEach { add(Tstr(it as String)) }
+                                }
                             }
+                            EcCurve::class -> (newValue as EcCurve).name.toDataItem()
+                            ReaderAuthMethod::class -> (newValue as ReaderAuthMethod).name.toDataItem()
+                            EcPrivateKey::class -> (newValue as EcPrivateKey).toDataItem()
+                            X509CertChain::class -> (newValue as X509CertChain).toDataItem()
+                            SignInWithGoogleUserData::class -> (newValue as SignInWithGoogleUserData).toDataItem()
+                            ReaderIdentity::class -> (newValue as ReaderIdentity).toDataItem()
+                            else -> { throw IllegalStateException("Type not supported") }
                         }
-                        EcCurve::class -> { (newValue as EcCurve).name.toDataItem() }
-                        ReaderAuthMethod::class -> { (newValue as ReaderAuthMethod).name.toDataItem() }
-                        EcPrivateKey::class -> {
-                            newValue?.let { (newValue as EcPrivateKey).toDataItem() } ?: Simple.NULL
-                        }
-                        X509CertChain::class -> {
-                            newValue?.let { (newValue as X509CertChain).toDataItem() } ?: Simple.NULL
-                        }
-                        else -> { throw IllegalStateException("Type not supported") }
                     }
                     if (settingsTable.get(key) == null) {
                         settingsTable.insert(key, ByteString(Cbor.encode(dataItem)))
@@ -141,8 +139,11 @@ class SettingsModel private constructor(
         bind(builtInIssuersUpdatedAt, "builtInIssuersUpdatedAt", Instant.DISTANT_PAST)
         bind(builtInIssuersVersion, "builtInIssuersVersion", Long.MIN_VALUE)
         bind(readerAuthMethod, "readerAuthMethod", ReaderAuthMethod.STANDARD_READER_AUTH)
+        bind(readerAuthMethodGoogleIdentity, "readerAuthMethodGoogleIdentity", null)
         bind(customReaderAuthKey, "customReaderAuthKey", null)
         bind(customReaderAuthCertChain, "customReaderAuthCertChain", null)
+        bind(explicitlySignedOut, "explicitlySignedOut", false)
+        bind(signedIn, "signedIn", null)
     }
 
     val logTransactions = MutableStateFlow<Boolean>(false)
@@ -150,12 +151,9 @@ class SettingsModel private constructor(
     val builtInIssuersUpdatedAt = MutableStateFlow<Instant>(Instant.DISTANT_PAST)
     val builtInIssuersVersion = MutableStateFlow<Long>(Long.MIN_VALUE)
     val readerAuthMethod = MutableStateFlow<ReaderAuthMethod>(ReaderAuthMethod.STANDARD_READER_AUTH)
+    val readerAuthMethodGoogleIdentity = MutableStateFlow<ReaderIdentity?>(null)
     val customReaderAuthKey = MutableStateFlow<EcPrivateKey?>(null)
     val customReaderAuthCertChain = MutableStateFlow<X509CertChain?>(null)
-}
-
-enum class ReaderAuthMethod {
-    NO_READER_AUTH,
-    STANDARD_READER_AUTH,
-    CUSTOM_KEY
+    val explicitlySignedOut = MutableStateFlow<Boolean>(false)
+    val signedIn = MutableStateFlow<SignInWithGoogleUserData?>(null)
 }

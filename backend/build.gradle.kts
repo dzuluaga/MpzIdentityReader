@@ -4,9 +4,24 @@ plugins {
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.ktor)
+    alias(libs.plugins.buildconfig)
 }
 
 project.setProperty("mainClassName", "org.multipaz.identityreader.backend.Main")
+
+val projectVersionCode: Int by rootProject.extra
+val projectVersionName: String by rootProject.extra
+
+buildConfig {
+    packageName("org.multipaz.identityreader")
+    buildConfigField("VERSION", projectVersionName)
+    // This server-side clientId works with APKs signed with the signing key in devkey.keystore
+    buildConfigField("IDENTITY_READER_BACKEND_CLIENT_ID",
+        System.getenv("IDENTITY_READER_BACKEND_CLIENT_ID")
+            ?: "332546139643-p9h5vs340rbmb5c6edids3euclfm4i41.apps.googleusercontent.com"
+    )
+    useKotlinOutput { internalVisibility = false }
+}
 
 kotlin {
     jvmToolchain(17)
@@ -37,6 +52,7 @@ dependencies {
     implementation(libs.ktor.server.netty)
     implementation(libs.ktor.server.logging)
     implementation(libs.logback.classic)
+    implementation(libs.identity.google.api.client)
 }
 
 ktor {
