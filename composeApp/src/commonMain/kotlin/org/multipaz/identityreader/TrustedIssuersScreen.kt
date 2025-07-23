@@ -143,6 +143,10 @@ fun TrustedIssuersScreen(
             "application/x-x509-key; format=pem",
             "application/x-x509-cert; format=pem",
             "application/x-x509-ca-cert",
+            "application/x-x509-ca-cert; format=der",
+            "application/pkix-cert",
+            "application/pkix-crl",
+            "*/*",
         ),
         allowMultiple = false,
         onResult = { files ->
