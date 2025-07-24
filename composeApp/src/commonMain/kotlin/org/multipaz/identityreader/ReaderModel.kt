@@ -105,6 +105,7 @@ class ReaderModel {
         _encodedSessionTranscript = null
         deviceEngagement = null
         _eReaderKey = null
+        mdocTransportOptions = null
         encodedDeviceRequest = null
         encodedDeviceEngagement = null
         handover = null
@@ -112,10 +113,15 @@ class ReaderModel {
         _state.value = State.IDLE
     }
 
+    private var mdocTransportOptions: MdocTransportOptions? = null
     private var encodedDeviceRequest: ByteString? = null
     private var encodedDeviceEngagement: ByteString? = null
     private var handover: DataItem? = null
     private var existingTransport: MdocTransport? = null
+
+    fun setMdocTransportOptions(options: MdocTransportOptions) {
+        mdocTransportOptions = options
+    }
 
     fun setConnectionEndpoint(
         encodedDeviceEngagement: ByteString,
@@ -215,9 +221,9 @@ class ReaderModel {
                 connectionMethods[0]
             }
             val transport = MdocTransportFactory.Default.createTransport(
-                connectionMethod,
-                MdocRole.MDOC_READER,
-                MdocTransportOptions(bleUseL2CAP = true) // TODO: options
+                connectionMethod = connectionMethod,
+                role = MdocRole.MDOC_READER,
+                options = mdocTransportOptions ?: MdocTransportOptions()
             )
             // TODO: maybe if (transport is NfcTransportMdocReader) {
             transport

@@ -53,6 +53,7 @@ import org.multipaz.compose.prompt.PromptDialogs
 import org.multipaz.crypto.X509Cert
 import org.multipaz.documenttype.DocumentTypeRepository
 import org.multipaz.documenttype.knowntypes.DrivingLicense
+import org.multipaz.mdoc.transport.MdocTransportOptions
 import org.multipaz.storage.ephemeral.EphemeralStorage
 import org.multipaz.trustmanagement.CompositeTrustManager
 import org.multipaz.trustmanagement.TrustEntryVical
@@ -97,6 +98,15 @@ class App(
     private lateinit var settingsModel: SettingsModel
     private lateinit var readerBackendClient: ReaderBackendClient
 
+    // This is set to FALSE for now because Apple Wallet's L2CAP implementation
+    // appears to be buggy.
+    //
+    private val mdocTransportOptionsForNfcEngagement =
+        MdocTransportOptions(bleUseL2CAP = false)
+
+    private val mdocTransportOptionsForQrEngagement =
+        MdocTransportOptions(bleUseL2CAP = true)
+
     private val initLock = Mutex()
     private var initialized = false
 
@@ -110,6 +120,7 @@ class App(
                 val encodedDeviceEngagement =
                     ByteString(urlLaunchData.url.substringAfter("mdoc:").fromBase64Url())
                 readerModel.reset()
+                readerModel.setMdocTransportOptions(mdocTransportOptionsForQrEngagement)
                 readerModel.setConnectionEndpoint(
                     encodedDeviceEngagement = encodedDeviceEngagement,
                     handover = Simple.NULL,
@@ -302,6 +313,7 @@ class App(
                         StartScreen(
                             settingsModel = settingsModel,
                             promptModel = promptModel,
+                            mdocTransportOptionsForNfcEngagement = mdocTransportOptionsForNfcEngagement,
                             onMenuPressed = {
                                 coroutineScope.launch {
                                     drawerState.open()
@@ -337,6 +349,7 @@ class App(
                                     val encodedDeviceEngagement =
                                         ByteString(mdocUri.substringAfter("mdoc:").fromBase64Url())
                                     readerModel.reset()
+                                    readerModel.setMdocTransportOptions(mdocTransportOptionsForQrEngagement)
                                     readerModel.setConnectionEndpoint(
                                         encodedDeviceEngagement = encodedDeviceEngagement,
                                         handover = Simple.NULL,

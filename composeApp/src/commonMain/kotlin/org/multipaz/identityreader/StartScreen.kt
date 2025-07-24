@@ -61,6 +61,7 @@ private const val TAG = "StartScreen"
 fun StartScreen(
     settingsModel: SettingsModel,
     promptModel: PromptModel,
+    mdocTransportOptionsForNfcEngagement: MdocTransportOptions,
     onMenuPressed: () -> Unit,
     onScanQrClicked: () -> Unit,
     onNfcHandover: suspend (
@@ -94,6 +95,7 @@ fun StartScreen(
                 StartScreenWithBluetoothPermission(
                     settingsModel = settingsModel,
                     promptModel = promptModel,
+                    mdocTransportOptionsForNfcEngagement = mdocTransportOptionsForNfcEngagement,
                     onScanQrClicked = onScanQrClicked,
                     onNfcHandover = onNfcHandover
                 )
@@ -106,6 +108,7 @@ fun StartScreen(
 private fun StartScreenWithBluetoothPermission(
     settingsModel: SettingsModel,
     promptModel: PromptModel,
+    mdocTransportOptionsForNfcEngagement: MdocTransportOptions,
     onScanQrClicked: () -> Unit,
     onNfcHandover: suspend (
         transport: MdocTransport,
@@ -142,7 +145,7 @@ private fun StartScreenWithBluetoothPermission(
             coroutineScope.launch {
                 scanNfcMdocReader(
                     message = null,
-                    options = MdocTransportOptions(bleUseL2CAP = true),
+                    options = mdocTransportOptionsForNfcEngagement,
                     transportFactory = MdocTransportFactory.Default,
                     // TODO: maybe do UI
                     selectConnectionMethod = { connectionMethods -> connectionMethods.first() },
