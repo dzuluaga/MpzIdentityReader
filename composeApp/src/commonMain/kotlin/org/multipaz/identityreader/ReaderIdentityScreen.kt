@@ -52,7 +52,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import multipazidentityreader.composeapp.generated.resources.Res
+import multipazidentityreader.composeapp.generated.resources.app_icon
 import multipazidentityreader.composeapp.generated.resources.reader_identity_title
+import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.multipaz.compose.decodeImage
 import org.multipaz.crypto.X509CertChain
@@ -74,7 +76,6 @@ fun ReaderIdentityScreen(
 ) {
     val coroutineScope = rememberCoroutineScope { promptModel }
     val showImportErrorDialog = remember { mutableStateOf<String?>(null) }
-    val signedIntoGoogle = settingsModel.signedIn.collectAsState()
     val availableReaderIdentities = mutableStateOf<List<ReaderIdentity>?>(null)
 
     val importReaderKeyFilePicker = rememberFilePicker(
@@ -95,7 +96,8 @@ fun ReaderIdentityScreen(
                             try {
                                 parsePkcs12(pkcs12Contents, passphrase)
                                 null
-                            } catch (_: WrongPassphraseException) {
+                            } catch (e: WrongPassphraseException) {
+                                Logger.w(TAG, "Wrong passphrase", e)
                                 "Wrong passphrase. Try again"
                             } catch (_: Throwable) {
                                 // If parsing fails for reasons other than the wrong passphrase
@@ -114,6 +116,8 @@ fun ReaderIdentityScreen(
                             require(certChain.validate()) {
                                 "Certificate chain did not validate"
                             }
+                            println("first : ${certChain.certificates[0].toPem()}")
+                            println("second : ${certChain.certificates[1].toPem()}")
                             // TODO: add a couple of additional checks for example that the leaf certificate
                             //   has the correct keyUsage flags, etc.
                             //
@@ -251,12 +255,13 @@ the request is from
                     ) {
                         Icon(
                             modifier = Modifier.size(32.dp),
-                            imageVector = Icons.Outlined.Key,
+                            painter = painterResource(Res.drawable.app_icon),
+                            tint = Color.Unspecified,
                             contentDescription = null
                         )
                         EntryItem(
                             modifier = Modifier.weight(1.0f),
-                            key = "Standard reader authentication",
+                            key = "Multipaz Identity Reader",
                             valueText = "The Multipaz Identity Reader CA will be used to " +
                                     "certify single-use reader keys",
                         )

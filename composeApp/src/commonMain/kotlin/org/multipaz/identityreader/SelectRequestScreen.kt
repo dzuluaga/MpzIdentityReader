@@ -30,6 +30,7 @@ fun SelectRequestScreen(
     readerBackendClient: ReaderBackendClient,
     onBackPressed: () -> Unit,
     onContinueClicked: () -> Unit,
+    onReaderIdentitiesClicked: () -> Unit
 ) {
     val selectedQueryName = remember { mutableStateOf(
         ReaderQuery.valueOf(settingsModel.selectedQueryName.value).name
@@ -67,7 +68,7 @@ fun SelectRequestScreen(
                         fontWeight = FontWeight.Bold
                     )
 
-                    Spacer(modifier = Modifier.weight(0.2f))
+                    Spacer(modifier = Modifier.weight(0.1f))
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(
                             16.dp,
@@ -85,7 +86,14 @@ fun SelectRequestScreen(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.weight(0.1f))
+                    Spacer(modifier = Modifier.weight(0.2f))
+
+                    RequestingData(
+                        settingsModel = settingsModel,
+                        onClicked = onReaderIdentitiesClicked
+                    )
+
+                    Spacer(modifier = Modifier.weight(0.2f))
 
                     FilledTonalButton(
                         onClick = {
@@ -107,7 +115,7 @@ fun SelectRequestScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.weight(0.4f))
+                    Spacer(modifier = Modifier.weight(0.1f))
                 }
             }
         }

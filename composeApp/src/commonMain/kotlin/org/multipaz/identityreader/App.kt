@@ -283,6 +283,22 @@ class App(
                             coroutineScope.launch {
                                 val encodedDeviceEngagement =
                                     ByteString(mdocUri.substringAfter("mdoc:").fromBase64Url())
+                                readerModel.reset()
+                                readerModel.setMdocTransportOptions(mdocTransportOptionsForQrEngagement)
+                                readerModel.setConnectionEndpoint(
+                                    encodedDeviceEngagement = encodedDeviceEngagement,
+                                    handover = Simple.NULL,
+                                    existingTransport = null
+                                )
+                                val readerQuery = ReaderQuery.valueOf(settingsModel.selectedQueryName.value)
+                                readerModel.setDeviceRequest(
+                                    readerQuery.generateDeviceRequest(
+                                        settingsModel = settingsModel,
+                                        encodedSessionTranscript = readerModel.encodedSessionTranscript,
+                                        readerBackendClient = readerBackendClient
+                                    )
+                                )
+                                navController.popBackStack()
                                 navController.navigate(route = TransferDestination.route)
                             }
                         }
@@ -297,6 +313,9 @@ class App(
                         onContinueClicked = {
                             navController.popBackStack()
                             navController.navigate(route = TransferDestination.route)
+                        },
+                        onReaderIdentitiesClicked = {
+                            navController.navigate(ReaderIdentityDestination.route)
                         }
                     )
                 }

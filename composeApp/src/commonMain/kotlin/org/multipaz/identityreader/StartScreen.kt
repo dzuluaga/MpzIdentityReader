@@ -438,41 +438,12 @@ private fun StartScreenWithPermissions(
             }
         }
 
-        if (settingsModel.readerAuthMethod.collectAsState().value == ReaderAuthMethod.GOOGLE_ACCOUNT) {
-            val identity = settingsModel.readerAuthMethodGoogleIdentity.value!!
-            Spacer(modifier = Modifier.weight(0.2f))
-            val entries = mutableListOf<@Composable () -> Unit>()
-            Column(
-                modifier = Modifier
-                    .clip(shape = RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                    .padding(8.dp)
-                    .clickable { onReaderIdentitiesClicked() },
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "Requesting data as",
-                    fontStyle = FontStyle.Italic,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp, alignment = Alignment.Start),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    identity.Icon()
-                    Text(
-                        text = identity.displayName,
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.weight(0.3f))
-        } else {
-            Spacer(modifier = Modifier.weight(0.5f))
-        }
+        Spacer(modifier = Modifier.weight(0.2f))
+        RequestingData(
+            settingsModel = settingsModel,
+            onClicked = onReaderIdentitiesClicked
+        )
+        Spacer(modifier = Modifier.weight(0.3f))
 
         // Only show the "Scan NFC" button on platforms which require the system NFC Scan dialog (iOS)
         // and if the device actually supports NFC scanning functionality.
