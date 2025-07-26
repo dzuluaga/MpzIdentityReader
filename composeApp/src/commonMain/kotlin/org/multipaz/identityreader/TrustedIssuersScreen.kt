@@ -146,7 +146,6 @@ fun TrustedIssuersScreen(
             "application/x-x509-ca-cert; format=der",
             "application/pkix-cert",
             "application/pkix-crl",
-            "*/*",
         ),
         allowMultiple = false,
         onResult = { files ->

@@ -6,6 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import kotlinx.io.bytestring.ByteString
 import org.multipaz.context.applicationContext
+import org.multipaz.util.Logger
+
+private const val TAG = "FilePicker"
 
 @Composable
 actual fun rememberFilePicker(
@@ -13,16 +16,20 @@ actual fun rememberFilePicker(
     allowMultiple: Boolean,
     onResult: (fileData: List<ByteString>) -> Unit,
 ): FilePicker {
+    // TODO: handle allowMultiple = true
     val filePicker =
         rememberLauncherForActivityResult(
             contract = ActivityResultContracts.OpenDocument(),
             onResult = { uri ->
                 if (uri != null) {
                     val inputStream = applicationContext.contentResolver.openInputStream(uri)
-                        ?: throw IllegalStateException("File not found")
-                    val bytes = inputStream.readBytes()
-                    inputStream.close()
-                    onResult(listOf(ByteString(bytes)))
+                    if (inputStream != null) {
+                        val bytes = inputStream.readBytes()
+                        inputStream.close()
+                        onResult(listOf(ByteString(bytes)))
+                    } else {
+                        Logger.e(TAG, "File not found")
+                    }
                 } else {
                     onResult(emptyList())
                 }

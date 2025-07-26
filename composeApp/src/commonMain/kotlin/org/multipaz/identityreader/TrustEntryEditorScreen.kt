@@ -61,24 +61,26 @@ fun TrustEntryEditorScreen(
     val imagePicker = rememberImagePicker(
         allowMultiple = false,
         onResult = { payloads ->
-            // Resize to 512x512 and crop so it fits.
-            val image = decodeImage(payloads[0].toByteArray())
-            val imageSize = min(image.width, image.height)
-            val croppedImage = image.cropRotateScaleImage(
-                cx = image.width.toDouble()/2,
-                cy = image.height.toDouble()/2,
-                angleDegrees = 0.0,
-                outputWidthPx = imageSize,
-                outputHeightPx = imageSize,
-                targetWidthPx = 512
-            )
-            val encodedCroppedImage = encodeImageToPng(croppedImage)
-            newMetadata = TrustMetadata(
-                displayName = newMetadata!!.displayName,
-                displayIcon = encodedCroppedImage,
-                privacyPolicyUrl = newMetadata!!.privacyPolicyUrl,
-                testOnly = newMetadata!!.testOnly
-            )
+            if (payloads.isNotEmpty()) {
+                // Resize to 512x512 and crop so it fits.
+                val image = decodeImage(payloads[0].toByteArray())
+                val imageSize = min(image.width, image.height)
+                val croppedImage = image.cropRotateScaleImage(
+                    cx = image.width.toDouble() / 2,
+                    cy = image.height.toDouble() / 2,
+                    angleDegrees = 0.0,
+                    outputWidthPx = imageSize,
+                    outputHeightPx = imageSize,
+                    targetWidthPx = 512
+                )
+                val encodedCroppedImage = encodeImageToPng(croppedImage)
+                newMetadata = TrustMetadata(
+                    displayName = newMetadata!!.displayName,
+                    displayIcon = encodedCroppedImage,
+                    privacyPolicyUrl = newMetadata!!.privacyPolicyUrl,
+                    testOnly = newMetadata!!.testOnly
+                )
+            }
         }
     )
     var nameText by remember { mutableStateOf(TextFieldValue("")) }
