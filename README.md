@@ -28,7 +28,7 @@ then create a reader certificate for user Bob Bobson, an employee of
 _Utopia Brewery_:
 
 ```shell
-$ multipazctl generateReaderCert --subject_and_issuer 'CN=Bob Bobson,O=Utopia Brewery,C=ZZ'
+$ multipazctl generateReaderCert --subject 'CN=Bob Bobson,O=Utopia Brewery,C=ZZ'
 - Generated Reader cert and private key with curve P256
 - Loaded reader root cert from reader_root_certificate.pem
 - Loaded reader root private key from reader_root_private_key.pem
