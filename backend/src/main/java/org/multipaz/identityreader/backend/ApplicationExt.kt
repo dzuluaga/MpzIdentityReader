@@ -123,6 +123,17 @@ private fun createServer(
         val readerRoot = getReaderRootIdentity(forTrustedDevices = true)
         val readerRootForUntrustedDevices = getReaderRootIdentity(forTrustedDevices = false)
         val (issuerTrustListVersion, issuerTrustList) = getTrustedIssuers()
+        
+        // Print the Reader Root Certificate for holder apps to import
+        println("=== READER ROOT CERTIFICATE (FOR HOLDER APPS) ===")
+        println("Subject: ${readerRoot.certificateChain.certificates[0].subject}")
+        println("Issuer: ${readerRoot.certificateChain.certificates[0].issuer}")
+        println("Valid From: ${readerRoot.certificateChain.certificates[0].validityNotBefore}")
+        println("Valid Until: ${readerRoot.certificateChain.certificates[0].validityNotAfter}")
+        println("PEM Format:")
+        println(readerRoot.certificateChain.certificates[0].toPem())
+        println("=== END READER ROOT CERTIFICATE ===")
+        
         ReaderBackend(
             readerRootKeyForUntrustedDevices = readerRootForUntrustedDevices.privateKey,
             readerRootCertChainForUntrustedDevices = readerRootForUntrustedDevices.certificateChain,

@@ -30,6 +30,8 @@ import org.multipaz.securearea.SecureArea
 import org.multipaz.storage.Storage
 import org.multipaz.storage.StorageTableSpec
 import org.multipaz.trustmanagement.TrustEntry
+import org.multipaz.trustmanagement.TrustEntryVical
+import org.multipaz.trustmanagement.TrustEntryX509Cert
 import org.multipaz.trustmanagement.fromCbor
 import org.multipaz.util.Logger
 import org.multipaz.util.Platform
@@ -100,14 +102,29 @@ open class ReaderBackendClient(
     private var certifiedKeys: MutableMap<String, CertifiedKey>? = null
 
     open suspend fun communicateWithServer(methodName: String, request: JsonObject): Pair<HttpStatusCode, JsonObject> {
-        val response = httpClient.post(readerBackendUrl + "/" + methodName) {
-            setBody(Json.encodeToString(request))
+        println("=== BACKEND DEBUG: Attempting to communicate with server ===")
+        println("URL: $readerBackendUrl/$methodName")
+        println("Request: ${Json.encodeToString(request)}")
+        
+        try {
+            val response = httpClient.post(readerBackendUrl + "/" + methodName) {
+                setBody(Json.encodeToString(request))
+            }
+            val responseBody = response.body<ByteArray>().decodeToString()
+            println("Response Status: ${response.status}")
+            println("Response Body: $responseBody")
+            println("=== BACKEND DEBUG: Communication successful ===")
+            return Pair(
+                response.status,
+                Json.decodeFromString<JsonObject>(responseBody)
+            )
+        } catch (e: Exception) {
+            println("=== BACKEND DEBUG: Communication failed ===")
+            println("Error: ${e.message}")
+            println("Error type: ${e::class.simpleName}")
+            e.printStackTrace()
+            throw e
         }
-        val responseBody = response.body<ByteArray>().decodeToString()
-        return Pair(
-            response.status,
-            Json.decodeFromString<JsonObject>(responseBody)
-        )
     }
 
     private suspend fun ensureCertifiedKeys() {
@@ -282,21 +299,44 @@ open class ReaderBackendClient(
     suspend fun getKey(
         atTime: Instant = Clock.System.now()
     ): Pair<KeyInfo, X509CertChain> {
+        println("=== GET KEY DEBUG: Starting getKey ===")
         try {
             ensureReplenished(atTime)
         } catch (e: Throwable) {
             Logger.w(TAG, "Ignoring error replenishing keys: $e")
+            println("=== GET KEY DEBUG: Error replenishing keys: $e ===")
         }
         // Return the oldest certificate
         val sortedCertifiedKeys = certifiedKeys!!.values
             .filter { it.validFrom < atTime && atTime < it.validUntil }
             .sortedBy { it.validFrom }
         if (sortedCertifiedKeys.isEmpty()) {
+            println("=== GET KEY DEBUG: No valid keys available ===")
             throw IllegalStateException("No currently valid keys available")
         }
+        
+        val selectedKey = sortedCertifiedKeys[0]
+        println("=== GET KEY DEBUG: Selected key ===")
+        println("Key alias: ${selectedKey.alias}")
+        println("Certificate chain has ${selectedKey.certification.certificates.size} certificates")
+        selectedKey.certification.certificates.forEachIndexed { index, cert ->
+            println("Certificate $index:")
+            println("  Subject: ${cert.subject}")
+            println("  Issuer: ${cert.issuer}")
+            println("  Valid from: ${cert.validityNotBefore}")
+            println("  Valid until: ${cert.validityNotAfter}")
+            if (index == 0) {
+                println("  PEM (Reader Certificate):")
+                println(cert.toPem())
+            } else {
+                println("  PEM (Root Certificate):")
+                println(cert.toPem())
+            }
+        }
+        
         return Pair(
-            secureArea.getKeyInfo(sortedCertifiedKeys[0].alias),
-            sortedCertifiedKeys[0].certification
+            secureArea.getKeyInfo(selectedKey.alias),
+            selectedKey.certification
         )
     }
 
@@ -333,7 +373,11 @@ open class ReaderBackendClient(
     }
 
     suspend fun getTrustedIssuers(currentVersion: Long? = null): Pair<Long, List<TrustEntry>>? {
+        println("=== TRUSTED ISSUERS DEBUG: Starting getTrustedIssuers ===")
+        println("Current version: $currentVersion")
+        
         val registrationData = ensureRegistered()
+        println("Registration data: $registrationData")
 
         val (nonceStatus, nonceRespObj) = communicateWithServer("getNonce", buildJsonObject {})
         check(nonceStatus == HttpStatusCode.OK)
@@ -363,11 +407,26 @@ open class ReaderBackendClient(
         val entries = mutableListOf<TrustEntry>()
         val version = getIssuerListObj["version"]?.jsonPrimitive?.long
         if (version == null) {
+            println("=== TRUSTED ISSUERS DEBUG: No version returned, returning null ===")
             return null
         }
         getIssuerListObj["entries"]!!.jsonArray.forEach {
-            entries.add(TrustEntry.fromCbor(it.jsonPrimitive.content.fromBase64Url()))
+            val entry = TrustEntry.fromCbor(it.jsonPrimitive.content.fromBase64Url())
+            entries.add(entry)
+            println("=== TRUSTED ISSUERS DEBUG: Added entry ===")
+            println("Entry type: ${entry::class.simpleName}")
+            when (entry) {
+                is TrustEntryX509Cert -> {
+                    println("Certificate subject: ${entry.certificate.subject}")
+                    println("Certificate issuer: ${entry.certificate.issuer}")
+                    println("Certificate PEM: ${entry.certificate.toPem()}")
+                }
+                is TrustEntryVical -> {
+                    println("VICAL entry with ${entry.encodedSignedVical.size} bytes")
+                }
+            }
         }
+        println("=== TRUSTED ISSUERS DEBUG: Returning ${entries.size} entries with version $version ===")
         return Pair(version, entries)
     }
 
