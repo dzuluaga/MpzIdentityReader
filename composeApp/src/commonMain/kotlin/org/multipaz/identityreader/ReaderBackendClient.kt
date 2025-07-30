@@ -491,6 +491,31 @@ open class ReaderBackendClient(
         }
     }
 
+    /**
+     * Prints the Reader Root Certificate in PEM format for easy extraction.
+     * This is useful for users who need to import the certificate into their holder apps.
+     */
+    suspend fun printReaderRootCertificate() {
+        try {
+            val (keyInfo, certChain) = getKey()
+            if (certChain.certificates.size >= 2) {
+                val readerRootCert = certChain.certificates.last() // Last certificate is the root
+                println("=== READER ROOT CERTIFICATE FOR HOLDER APPS ===")
+                println("Subject: ${readerRootCert.subject}")
+                println("Issuer: ${readerRootCert.issuer}")
+                println("Valid from: ${readerRootCert.validityNotBefore}")
+                println("Valid until: ${readerRootCert.validityNotAfter}")
+                println("PEM:")
+                println(readerRootCert.toPem())
+                println("=== END READER ROOT CERTIFICATE ===")
+            } else {
+                println("=== WARNING: Certificate chain too short, cannot extract root certificate ===")
+            }
+        } catch (e: Throwable) {
+            println("=== ERROR: Could not extract Reader Root Certificate: $e ===")
+        }
+    }
+
     companion object {
         private const val TAG = "ReaderBackendClient"
     }

@@ -231,6 +231,8 @@ class App(
                 while (true) {
                     ensureReaderKeys()
                     updateBuiltInIssuers()
+                    // Print Reader Root Certificate for easy extraction
+                    readerBackendClient.printReaderRootCertificate()
                     delay(4.hours)
                 }
             }
